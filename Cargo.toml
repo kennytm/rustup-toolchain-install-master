@@ -2,6 +2,15 @@
 name = "rustup-toolchain-install-master"
 version = "0.1.0"
 authors = ["kennytm <kennytm@gmail.com>"]
+description = "Install master rustc toolchain into rustup"
+repository = "https://github.com/kennytm/rustup-toolchain-install-master"
+readme = "README.md"
+keywords = ["rustup"]
+categories = ["development-tools"]
+license = "MIT"
+
+[badges]
+maintenance = { status = "passively-maintained" }
 
 [dependencies]
 failure = "0.1"
