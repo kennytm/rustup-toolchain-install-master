@@ -1,0 +1,15 @@
+[package]
+name = "rustup-toolchain-install-master"
+version = "0.1.0"
+authors = ["kennytm <kennytm@gmail.com>"]
+
+[dependencies]
+failure = "0.1"
+pbr = "1"
+reqwest = "0.8"
+structopt = "0.1"
+structopt-derive = "0.1"
+tar = "0.4"
+tee = "0.1"
+tempdir = "0.3"
+xz2 = "0.1"
