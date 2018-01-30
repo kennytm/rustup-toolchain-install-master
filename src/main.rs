@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate failure;
 extern crate pbr;
 extern crate reqwest;
@@ -15,7 +14,7 @@ use std::fs::{create_dir_all, rename};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
-use std::str::FromStr;
+use std::borrow::Cow;
 
 use failure::Error;
 use pbr::{ProgressBar, Units};
@@ -27,51 +26,15 @@ use tee::TeeReader;
 use tempdir::TempDir;
 use xz2::read::XzDecoder;
 
-#[derive(Copy, Clone, Debug)]
-enum Build {
-    /// Normal master builds
-    Master,
-    /// Try build
-    Try,
-    /// Alt build
-    Alt,
-}
-
-#[derive(Debug, Fail)]
-#[fail(display = "unknown build type")]
-struct UnknownBuildError;
-
-impl FromStr for Build {
-    type Err = UnknownBuildError;
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match input {
-            "master" => Ok(Build::Master),
-            "try" => Ok(Build::Try),
-            "alt" => Ok(Build::Alt),
-            _ => Err(UnknownBuildError),
-        }
-    }
-}
-
-impl Build {
-    fn tag(self) -> &'static str {
-        match self {
-            Build::Master => "",
-            Build::Try => "-try",
-            Build::Alt => "-alt",
-        }
-    }
-}
-
 #[derive(StructOpt, Debug)]
 struct Args {
     #[structopt(help = "full commit hashes of the rustc builds; all 40 digits are needed",
                 required_raw = "true")]
     commits: Vec<String>,
 
-    #[structopt(short = "b", long = "build", help = "build type",
-                possible_values_raw = r#"&["master", "try", "alt"]"#, default_value = "master")]
-    build: Build,
+    #[structopt(short = "a", long = "alt",
+                help = "download the alt build instead of normal build")]
+    alt: bool,
 
     #[structopt(short = "s", long = "server",
                 help = "the server path which stores the compilers",
@@ -130,12 +93,16 @@ fn install_single_toolchain(
     prefix: &str,
     toolchains_path: &Path,
     commit: &str,
-    build: Build,
+    alt: bool,
     rustc_filename: &str,
     rust_std_targets: &[&str],
 ) -> Result<(), Error> {
-    let dest = format!("{}{}", commit, build.tag());
-    let toolchain_path = toolchains_path.join(&dest);
+    let dest = if alt {
+        Cow::Owned(format!("{}-alt", commit))
+    } else {
+        Cow::Borrowed(commit)
+    };
+    let toolchain_path = toolchains_path.join(&*dest);
     if toolchain_path.is_dir() {
         eprintln!("toolchain `{}` is already installed", dest);
         return Ok(());
@@ -146,7 +113,7 @@ fn install_single_toolchain(
         &client,
         &format!("{}/{}/{}.tar.xz", prefix, commit, rustc_filename),
         &path_buf![&rustc_filename, "rustc"],
-        Path::new(&dest),
+        Path::new(&*dest),
     )?;
 
     // download libstd.
@@ -161,7 +128,9 @@ fn install_single_toolchain(
     }
 
     // install.
-    rename(&dest, toolchain_path)?;
+    rename(&*dest, toolchain_path)?;
+    eprintln!("toolchain `{}` is successfully installed!", dest);
+
     Ok(())
 }
 
@@ -203,7 +172,11 @@ fn run() -> Result<(), Error> {
     let toolchains_dir = TempDir::new("toolchains")?;
     set_current_dir(toolchains_dir.path())?;
 
-    let prefix = format!("{}/rustc-builds{}", args.server, args.build.tag());
+    let prefix = format!(
+        "{}/rustc-builds{}",
+        args.server,
+        if args.alt { "-alt" } else { "" }
+    );
 
     for commit in args.commits {
         if let Err(e) = install_single_toolchain(
@@ -211,7 +184,7 @@ fn run() -> Result<(), Error> {
             &prefix,
             &toolchains_path,
             &commit,
-            args.build,
+            args.alt,
             &rustc_filename,
             &rust_std_targets,
         ) {
