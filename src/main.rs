@@ -11,13 +11,13 @@ extern crate tempdir;
 extern crate xz2;
 
 use std::env::{home_dir, set_current_dir, var_os};
-use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, rename};
+use std::fs::{create_dir_all, rename};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use failure::{Error, ResultExt};
+use failure::Error;
 use pbr::{ProgressBar, Units};
 use reqwest::{Client, ClientBuilder, Proxy};
 use reqwest::header::ContentLength;
@@ -93,10 +93,7 @@ macro_rules! path_buf {
     ($($e:expr),*$(,)*) => { [$($e),*].iter().collect::<PathBuf>() }
 }
 
-fn download_tar_xz(client: &Client, url: &str) -> Result<(), Error> {
-    let _ = remove_dir_all("downloads");
-    let _ = create_dir("downloads");
-
+fn download_tar_xz(client: &Client, url: &str, src: &Path, dest: &Path) -> Result<(), Error> {
     eprintln!("downloading <{}>...", url);
 
     let response = client.get(url).send()?.error_for_status()?;
@@ -112,9 +109,15 @@ fn download_tar_xz(client: &Client, url: &str) -> Result<(), Error> {
     {
         let response = TeeReader::new(response, &mut bar);
         let response = XzDecoder::new(response);
-        Archive::new(response)
-            .unpack("downloads")
-            .context("unarchiving")?;
+        for entry in Archive::new(response).entries()? {
+            let mut entry = entry?;
+            let dest_path = match entry.path()?.strip_prefix(src) {
+                Ok(sub_path) => dest.join(sub_path),
+                Err(_) => continue,
+            };
+            create_dir_all(dest_path.parent().unwrap())?;
+            entry.unpack(dest_path)?;
+        }
     }
 
     bar.finish_print("completed");
@@ -139,39 +142,26 @@ fn install_single_toolchain(
     }
 
     // download rustc.
-    let rustc_url = format!("{}/{}/{}.tar.xz", prefix, commit, rustc_filename);
-    download_tar_xz(&client, &rustc_url).context("downloading rustc")?;
-    let rustc_src_folder = path_buf!["downloads", &rustc_filename, "rustc"];
-    rename(&rustc_src_folder, &dest).context("staging rustc")?;
+    download_tar_xz(
+        &client,
+        &format!("{}/{}/{}.tar.xz", prefix, commit, rustc_filename),
+        &path_buf![&rustc_filename, "rustc"],
+        Path::new(&dest),
+    )?;
 
     // download libstd.
     for target in rust_std_targets {
         let rust_std_filename = format!("rust-std-nightly-{}", target);
-        let rust_std_url = format!("{}/{}/{}.tar.xz", prefix, commit, rust_std_filename);
-        download_tar_xz(&client, &rust_std_url).context("downloading libstd")?;
-        let rust_std_src_folder = path_buf![
-            "downloads",
-            &rust_std_filename,
-            &format!("rust-std-{}", target),
-            "lib",
-            "rustlib",
-            target,
-            "lib",
-        ];
-        let rust_std_dest_folder = path_buf![&dest, "lib", "rustlib", target, "lib"];
-        create_dir_all(&rust_std_dest_folder).context("preparing libstd")?;
-        // We cannot simply move the entire folder, since the rustc tarball
-        // starts to populate the `rustlib/` folder after migrating to LLVM 6.
-        for lib in read_dir(rust_std_src_folder)? {
-            let lib = lib?;
-            let src = lib.path();
-            let dest = rust_std_dest_folder.join(lib.file_name());
-            rename(src, dest)?;
-        }
+        download_tar_xz(
+            &client,
+            &format!("{}/{}/{}.tar.xz", prefix, commit, rust_std_filename),
+            &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
+            &path_buf![&dest, "lib"],
+        )?;
     }
 
     // install.
-    rename(&dest, toolchain_path).context("installing")?;
+    rename(&dest, toolchain_path)?;
     Ok(())
 }
 
