@@ -11,13 +11,13 @@ extern crate tempdir;
 extern crate xz2;
 
 use std::env::{home_dir, set_current_dir, var_os};
-use std::fs::{create_dir, remove_dir_all, rename};
+use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, rename};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
-use failure::Error;
+use failure::{Error, ResultExt};
 use pbr::{ProgressBar, Units};
 use reqwest::{Client, ClientBuilder, Proxy};
 use reqwest::header::ContentLength;
@@ -95,7 +95,7 @@ macro_rules! path_buf {
 
 fn download_tar_xz(client: &Client, url: &str) -> Result<(), Error> {
     let _ = remove_dir_all("downloads");
-    create_dir("downloads")?;
+    let _ = create_dir("downloads");
 
     eprintln!("downloading <{}>...", url);
 
@@ -112,7 +112,9 @@ fn download_tar_xz(client: &Client, url: &str) -> Result<(), Error> {
     {
         let response = TeeReader::new(response, &mut bar);
         let response = XzDecoder::new(response);
-        Archive::new(response).unpack("downloads")?;
+        Archive::new(response)
+            .unpack("downloads")
+            .context("unarchiving")?;
     }
 
     bar.finish_print("completed");
@@ -138,15 +140,15 @@ fn install_single_toolchain(
 
     // download rustc.
     let rustc_url = format!("{}/{}/{}.tar.xz", prefix, commit, rustc_filename);
-    download_tar_xz(&client, &rustc_url)?;
+    download_tar_xz(&client, &rustc_url).context("downloading rustc")?;
     let rustc_src_folder = path_buf!["downloads", &rustc_filename, "rustc"];
-    rename(&rustc_src_folder, &dest)?;
+    rename(&rustc_src_folder, &dest).context("staging rustc")?;
 
     // download libstd.
     for target in rust_std_targets {
         let rust_std_filename = format!("rust-std-nightly-{}", target);
         let rust_std_url = format!("{}/{}/{}.tar.xz", prefix, commit, rust_std_filename);
-        download_tar_xz(&client, &rust_std_url)?;
+        download_tar_xz(&client, &rust_std_url).context("downloading libstd")?;
         let rust_std_src_folder = path_buf![
             "downloads",
             &rust_std_filename,
@@ -154,13 +156,22 @@ fn install_single_toolchain(
             "lib",
             "rustlib",
             target,
+            "lib",
         ];
-        let rust_std_dest_folder = path_buf![&dest, "lib", "rustlib", target];
-        rename(&rust_std_src_folder, &rust_std_dest_folder)?;
+        let rust_std_dest_folder = path_buf![&dest, "lib", "rustlib", target, "lib"];
+        create_dir_all(&rust_std_dest_folder).context("preparing libstd")?;
+        // We cannot simply move the entire folder, since the rustc tarball
+        // starts to populate the `rustlib/` folder after migrating to LLVM 6.
+        for lib in read_dir(rust_std_src_folder)? {
+            let lib = lib?;
+            let src = lib.path();
+            let dest = rust_std_dest_folder.join(lib.file_name());
+            rename(src, dest)?;
+        }
     }
 
     // install.
-    rename(&dest, toolchain_path)?;
+    rename(&dest, toolchain_path).context("installing")?;
     Ok(())
 }
 
@@ -214,7 +225,7 @@ fn run() -> Result<(), Error> {
             &rustc_filename,
             &rust_std_targets,
         ) {
-            eprintln!("skipping {} due to failure: {}", commit, e);
+            eprintln!("skipping {} due to failure:\n{:?}", commit, e);
         }
     }
 
