@@ -15,6 +15,7 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::borrow::Cow;
+use std::time::Duration;
 
 use failure::Error;
 use pbr::{ProgressBar, Units};
@@ -68,6 +69,7 @@ fn download_tar_xz(client: &Client, url: &str, src: &Path, dest: &Path) -> Resul
         .unwrap_or(0);
     let mut bar = ProgressBar::new(length);
     bar.set_units(Units::Bytes);
+    bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
 
     {
         let response = TeeReader::new(response, &mut bar);
