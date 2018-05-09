@@ -1,6 +1,6 @@
 [package]
 name = "rustup-toolchain-install-master"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["kennytm <kennytm@gmail.com>"]
 description = "Install master rustc toolchain into rustup"
 repository = "https://github.com/kennytm/rustup-toolchain-install-master"
@@ -11,6 +11,9 @@ license = "MIT"
 
 [badges]
 maintenance = { status = "passively-maintained" }
+travis-ci = { repository = "kennytm/rustup-toolchain-install-master" }
+is-it-maintained-issue-resolution = { repository = "kennytm/rustup-toolchain-install-master" }
+is-it-maintained-open-issues = { repository = "kennytm/rustup-toolchain-install-master" }
 
 [dependencies]
 failure = "0.1"

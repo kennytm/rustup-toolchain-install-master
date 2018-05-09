@@ -1,6 +1,8 @@
 rustup-toolchain-install-master
 ===============================
 
+![Travis status](https://travis-ci.com/kennytm/rustup-toolchain-install-master.svg?branch=master)
+
 Installs compiler artifacts generated fresh from Rust's CI into `rustup`.
 
 ```
@@ -28,7 +30,7 @@ Installation
 
 Install `rustup`, and then install from Cargo.
 
-```sh
+```console
 $ cargo install rustup-toolchain-install-master
 ```
 
@@ -37,7 +39,7 @@ Usage
 
 Download a normal toolchain:
 
-```
+```console
 $ rustup-toolchain-install-master def3269a71be2e737cad27418a3dad9f5bd6cd32
 downloading <https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rustc-nightly-x86_64-apple-darwin.tar.xz>...
 completed
@@ -48,7 +50,7 @@ toolchain `def3269a71be2e737cad27418a3dad9f5bd6cd32` is successfully installed!
 
 Use it:
 
-```
+```console
 $ rustc +def3269a71be2e737cad27418a3dad9f5bd6cd32 -vV
 rustc 1.25.0-nightly (def3269a7 2018-01-30)
 binary: rustc
@@ -61,7 +63,7 @@ LLVM version: 4.0
 
 Remove it using `rustup`:
 
-```
+```console
 $ rustup uninstall def3269a71be2e737cad27418a3dad9f5bd6cd32
 info: uninstalling toolchain 'def3269a71be2e737cad27418a3dad9f5bd6cd32'
 info: toolchain 'def3269a71be2e737cad27418a3dad9f5bd6cd32' uninstalled
