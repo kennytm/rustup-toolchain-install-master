@@ -1,15 +1,15 @@
 extern crate failure;
+extern crate home;
 extern crate pbr;
 extern crate reqwest;
-extern crate structopt;
 #[macro_use]
-extern crate structopt_derive;
+extern crate structopt;
 extern crate tar;
 extern crate tee;
 extern crate tempdir;
 extern crate xz2;
 
-use std::env::{home_dir, set_current_dir, var_os};
+use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
 use std::iter::once;
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ use xz2::read::XzDecoder;
 #[derive(StructOpt, Debug)]
 struct Args {
     #[structopt(help = "full commit hashes of the rustc builds; all 40 digits are needed",
-                required_raw = "true")]
+                raw(required = "true"))]
     commits: Vec<String>,
 
     #[structopt(short = "a", long = "alt",
@@ -143,18 +143,11 @@ fn run() -> Result<(), Error> {
     }
     let client = client_builder.build()?;
 
-    let mut toolchains_path = match var_os("RUSTUP_HOME") {
-        Some(h) => PathBuf::from(h),
-        None => {
-            let mut home = home_dir().expect("$HOME is undefined?");
-            home.push(".rustup");
-            home
-        }
-    };
+    let mut toolchains_path = home::rustup_home().expect("$RUSTUP_HOME is undefined?");
     toolchains_path.push("toolchains");
     if !toolchains_path.is_dir() {
         eprintln!(
-            "`{}` is not a directory. please install rustup.",
+            "`{}` is not a directory. please reinstall rustup.",
             toolchains_path.display()
         );
         exit(1);

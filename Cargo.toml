@@ -14,10 +14,10 @@ maintenance = { status = "passively-maintained" }
 
 [dependencies]
 failure = "0.1"
+home = "0.3"
 pbr = "1"
 reqwest = "0.8"
-structopt = "0.1"
-structopt-derive = "0.1"
+structopt = "0.2"
 tar = "0.4"
 tee = "0.1"
 tempdir = "0.3"
