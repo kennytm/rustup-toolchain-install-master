@@ -7,13 +7,13 @@ extern crate reqwest;
 extern crate structopt;
 extern crate tar;
 extern crate tee;
-extern crate tempdir;
+extern crate tempfile;
 extern crate xz2;
 
 use std::borrow::Cow;
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
-use std::io::{stdout, stderr, Write};
+use std::io::{stderr, stdout, Write};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -26,7 +26,7 @@ use reqwest::{Client, ClientBuilder, Proxy};
 use structopt::StructOpt;
 use tar::Archive;
 use tee::TeeReader;
-use tempdir::TempDir;
+use tempfile::{tempdir, tempdir_in};
 use xz2::read::XzDecoder;
 
 #[derive(StructOpt, Debug)]
@@ -207,8 +207,8 @@ fn run() -> Result<(), Error> {
     }
     let client = client_builder.build()?;
 
-    let mut toolchains_path = home::rustup_home().expect("$RUSTUP_HOME is undefined?");
-    toolchains_path.push("toolchains");
+    let rustup_home = home::rustup_home().expect("$RUSTUP_HOME is undefined?");
+    let toolchains_path = rustup_home.join("toolchains");
     if !toolchains_path.is_dir() {
         eprintln!(
             "`{}` is not a directory. please reinstall rustup.",
@@ -227,7 +227,14 @@ fn run() -> Result<(), Error> {
         .chain(once(host))
         .collect::<Vec<_>>();
 
-    let toolchains_dir = TempDir::new("toolchains")?;
+    let toolchains_dir = {
+        let path = rustup_home.join("tmp");
+        if path.is_dir() {
+            tempdir_in(path)
+        } else {
+            tempdir()
+        }
+    }?;
     set_current_dir(toolchains_dir.path())?;
 
     let prefix = format!(
