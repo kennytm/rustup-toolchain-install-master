@@ -30,8 +30,8 @@ use xz2::read::XzDecoder;
 #[derive(StructOpt, Debug)]
 struct Args {
     #[structopt(
-        help = "full commit hashes of the rustc builds; all 40 digits are needed",
-        raw(required = "true")
+        help = "full commit hashes of the rustc builds, all 40 digits are needed; \
+                if omitted, the latest master commit will be installed"
     )]
     commits: Vec<String>,
 
@@ -60,6 +60,9 @@ struct Args {
 
     #[structopt(short = "p", long = "proxy", help = "the HTTP proxy for all download requests")]
     proxy: Option<String>,
+
+    #[structopt(long = "github-token", help = "An authorization token to access GitHub APIs")]
+    github_token: Option<String>,
 }
 
 macro_rules! path_buf {
@@ -145,8 +148,29 @@ fn install_single_toolchain(
     Ok(())
 }
 
+fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
+    let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
+    req.header(Accept(vec![
+        "application/vnd.github.VERSION.sha".parse().unwrap(),
+    ]));
+    if let Some(token) = github_token {
+        req.header(Authorization(format!("token {}", token)));
+    }
+    let master_commit = req.send()?.error_for_status()?.text()?;
+    if master_commit.len() == 40
+        && master_commit
+            .chars()
+            .all(|c| '0' <= c && c <= '9' || 'a' <= c && c <= 'f')
+    {
+        println!("{}", master_commit);
+        Ok(master_commit)
+    } else {
+        bail!("unable to parse `{}` as a commit", master_commit)
+    }
+}
+
 fn run() -> Result<(), Error> {
-    let args = Args::from_args();
+    let mut args = Args::from_args();
 
     let mut client_builder = ClientBuilder::new();
     if let Some(proxy) = args.proxy {
@@ -182,6 +206,13 @@ fn run() -> Result<(), Error> {
         args.server,
         if args.alt { "-alt" } else { "" }
     );
+
+    if args.commits.is_empty() {
+        args.commits.push(fetch_master_commit(
+            &client,
+            args.github_token.as_ref().map(|s| &**s),
+        )?);
+    }
 
     for commit in args.commits {
         if let Err(e) = install_single_toolchain(
