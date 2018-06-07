@@ -8,16 +8,10 @@ git:
 
 cache: cargo
 
-before_script:
-  - >
-      RUST_COMMIT=$(curl -H "Authorization: token $GITHUB_TOKEN" -H 'Accept: application/vnd.github.VERSION.sha' 'https://api.github.com/repos/rust-lang/rust/commits/master');
-      echo $RUST_COMMIT
-
 script:
   - cargo install --debug --force
   - >
-      if echo "$RUST_COMMIT" | grep -q '[0-9a-f]\{40\}'; then
-        rustup-toolchain-install-master "$RUST_COMMIT" &&
-        rustc +"$RUST_COMMIT" -vV &&
-        rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT";
-      fi
+      RUST_COMMIT=$(rustup-toolchain-install-master --github-token $GITHUB_TOKEN) &&
+      echo $RUST_COMMIT &&
+      rustc +"$RUST_COMMIT" -vV &&
+      rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT";
