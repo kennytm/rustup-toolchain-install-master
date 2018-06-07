@@ -13,6 +13,7 @@ extern crate xz2;
 use std::borrow::Cow;
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
+use std::io::{stdout, stderr, Write};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -89,7 +90,10 @@ fn download_tar_xz(
             .get::<ContentLength>()
             .map(|h| h.0)
             .unwrap_or(0);
-        let mut bar = ProgressBar::new(length);
+
+        let err = stderr();
+        let mut lock = err.lock();
+        let mut bar = ProgressBar::on(lock, length);
         bar.set_units(Units::Bytes);
         bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
 
@@ -157,13 +161,19 @@ fn install_single_toolchain(
         rename(&*dest, toolchain_path)?;
         eprintln!("toolchain `{}` is successfully installed!", dest);
     } else {
-        eprintln!("toolchain `{}` will be installed to `{}` on real run", dest, toolchain_path.display());
+        eprintln!(
+            "toolchain `{}` will be installed to `{}` on real run",
+            dest,
+            toolchain_path.display()
+        );
     }
 
     Ok(())
 }
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
+    eprint!("fetching master commit hash... ");
+
     let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
     req.header(Accept(vec![
         "application/vnd.github.VERSION.sha".parse().unwrap(),
@@ -177,7 +187,11 @@ fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<St
             .chars()
             .all(|c| '0' <= c && c <= '9' || 'a' <= c && c <= 'f')
     {
-        println!("{}", master_commit);
+        let out = stdout();
+        let mut lock = out.lock();
+        lock.write_all(master_commit.as_bytes())?;
+        lock.flush()?;
+        eprintln!();
         Ok(master_commit)
     } else {
         bail!("unable to parse `{}` as a commit", master_commit)
