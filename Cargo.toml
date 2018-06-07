@@ -1,6 +1,6 @@
 [package]
 name = "rustup-toolchain-install-master"
-version = "0.2.0"
+version = "1.0.0"
 authors = ["kennytm <kennytm@gmail.com>"]
 description = "Install master rustc toolchain into rustup"
 repository = "https://github.com/kennytm/rustup-toolchain-install-master"
