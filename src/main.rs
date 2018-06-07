@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate failure;
 extern crate home;
 extern crate pbr;
@@ -19,7 +20,7 @@ use std::time::Duration;
 
 use failure::Error;
 use pbr::{ProgressBar, Units};
-use reqwest::header::ContentLength;
+use reqwest::header::{Accept, Authorization, ContentLength};
 use reqwest::{Client, ClientBuilder, Proxy};
 use structopt::StructOpt;
 use tar::Archive;
@@ -63,47 +64,57 @@ struct Args {
 
     #[structopt(long = "github-token", help = "An authorization token to access GitHub APIs")]
     github_token: Option<String>,
+
+    #[structopt(long = "dry-run", help = "Only log the URLs, without downloading the artifacts")]
+    dry_run: bool,
 }
 
 macro_rules! path_buf {
     ($($e:expr),*$(,)*) => { [$($e),*].iter().collect::<PathBuf>() }
 }
 
-fn download_tar_xz(client: &Client, url: &str, src: &Path, dest: &Path) -> Result<(), Error> {
+fn download_tar_xz(
+    client: Option<&Client>,
+    url: &str,
+    src: &Path,
+    dest: &Path,
+) -> Result<(), Error> {
     eprintln!("downloading <{}>...", url);
 
-    let response = client.get(url).send()?.error_for_status()?;
+    if let Some(client) = client {
+        let response = client.get(url).send()?.error_for_status()?;
 
-    let length = response
-        .headers()
-        .get::<ContentLength>()
-        .map(|h| h.0)
-        .unwrap_or(0);
-    let mut bar = ProgressBar::new(length);
-    bar.set_units(Units::Bytes);
-    bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
+        let length = response
+            .headers()
+            .get::<ContentLength>()
+            .map(|h| h.0)
+            .unwrap_or(0);
+        let mut bar = ProgressBar::new(length);
+        bar.set_units(Units::Bytes);
+        bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
 
-    {
-        let response = TeeReader::new(response, &mut bar);
-        let response = XzDecoder::new(response);
-        for entry in Archive::new(response).entries()? {
-            let mut entry = entry?;
-            let dest_path = match entry.path()?.strip_prefix(src) {
-                Ok(sub_path) => dest.join(sub_path),
-                Err(_) => continue,
-            };
-            create_dir_all(dest_path.parent().unwrap())?;
-            entry.unpack(dest_path)?;
+        {
+            let response = TeeReader::new(response, &mut bar);
+            let response = XzDecoder::new(response);
+            for entry in Archive::new(response).entries()? {
+                let mut entry = entry?;
+                let dest_path = match entry.path()?.strip_prefix(src) {
+                    Ok(sub_path) => dest.join(sub_path),
+                    Err(_) => continue,
+                };
+                create_dir_all(dest_path.parent().unwrap())?;
+                entry.unpack(dest_path)?;
+            }
         }
-    }
 
-    bar.finish_print("completed");
+        bar.finish_print("completed");
+    }
 
     Ok(())
 }
 
 fn install_single_toolchain(
-    client: &Client,
+    client: Option<&Client>,
     prefix: &str,
     toolchains_path: &Path,
     commit: &str,
@@ -124,7 +135,7 @@ fn install_single_toolchain(
 
     // download rustc.
     download_tar_xz(
-        &client,
+        client,
         &format!("{}/{}/{}.tar.xz", prefix, commit, rustc_filename),
         &path_buf![&rustc_filename, "rustc"],
         Path::new(&*dest),
@@ -134,7 +145,7 @@ fn install_single_toolchain(
     for target in rust_std_targets {
         let rust_std_filename = format!("rust-std-nightly-{}", target);
         download_tar_xz(
-            &client,
+            client,
             &format!("{}/{}/{}.tar.xz", prefix, commit, rust_std_filename),
             &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
             &path_buf![&dest, "lib"],
@@ -142,8 +153,12 @@ fn install_single_toolchain(
     }
 
     // install.
-    rename(&*dest, toolchain_path)?;
-    eprintln!("toolchain `{}` is successfully installed!", dest);
+    if client.is_some() {
+        rename(&*dest, toolchain_path)?;
+        eprintln!("toolchain `{}` is successfully installed!", dest);
+    } else {
+        eprintln!("toolchain `{}` will be installed to `{}` on real run", dest, toolchain_path.display());
+    }
 
     Ok(())
 }
@@ -214,9 +229,10 @@ fn run() -> Result<(), Error> {
         )?);
     }
 
+    let dry_run_client = if args.dry_run { None } else { Some(&client) };
     for commit in args.commits {
         if let Err(e) = install_single_toolchain(
-            &client,
+            dry_run_client,
             &prefix,
             &toolchains_path,
             &commit,
