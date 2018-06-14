@@ -1,7 +1,7 @@
 rustup-toolchain-install-master
 ===============================
 
-![Travis status](https://travis-ci.com/kennytm/rustup-toolchain-install-master.svg?branch=master)
+[![Travis status](https://travis-ci.com/kennytm/rustup-toolchain-install-master.svg?branch=master)](https://travis-ci.com/kennytm/rustup-toolchain-install-master)
 
 Installs compiler artifacts generated fresh from Rust's CI into `rustup`.
 
