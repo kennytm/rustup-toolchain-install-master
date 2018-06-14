@@ -15,11 +15,12 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -i, --host <host>             the triples of host platform
-    -p, --proxy <proxy>           the HTTP proxy for all download requests
-    -s, --server <server>         the server path which stores the compilers [default: https://s3-us-west
-                                  -1.amazonaws.com/rust-lang-ci2]
-    -t, --targets <targets>...    additional target platforms to install, besides the host platform
+    -c, --component <components>... additional components to install, besides rustc and rust-std
+    -i, --host <host>               the triples of host platform
+    -p, --proxy <proxy>             the HTTP proxy for all download requests
+    -s, --server <server>           the server path which stores the compilers [default: https://s3-us-west
+                                    -1.amazonaws.com/rust-lang-ci2]
+    -t, --targets <targets>...      additional target platforms to install, besides the host platform
 
 ARGS:
     <commits>...    full commit hashes of the rustc builds; all 40 digits are needed

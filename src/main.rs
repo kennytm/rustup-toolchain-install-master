@@ -60,6 +60,13 @@ struct Args {
     )]
     targets: Vec<String>,
 
+    #[structopt(
+        short = "c",
+        long = "component",
+        help = "additional components to install, besides rustc and rust-std"
+    )]
+    components: Vec<String>,
+
     #[structopt(short = "p", long = "proxy", help = "the HTTP proxy for all download requests")]
     proxy: Option<String>,
 
@@ -123,8 +130,9 @@ fn install_single_toolchain(
     toolchains_path: &Path,
     commit: &str,
     alt: bool,
-    rustc_filename: &str,
+    host_target: &str,
     rust_std_targets: &[&str],
+    components: &[&str],
 ) -> Result<(), Error> {
     let dest = if alt {
         Cow::Owned(format!("{}-alt", commit))
@@ -137,15 +145,18 @@ fn install_single_toolchain(
         return Ok(());
     }
 
-    // download rustc.
-    download_tar_xz(
-        client,
-        &format!("{}/{}/{}.tar.xz", prefix, commit, rustc_filename),
-        &path_buf![&rustc_filename, "rustc"],
-        Path::new(&*dest),
-    )?;
+    // download every component except rust-std.
+    for component in once(&"rustc").chain(components.iter()) {
+        let component_filename = format!("{}-nightly-{}", component, host_target);
+        download_tar_xz(
+            client,
+            &format!("{}/{}/{}.tar.xz", prefix, commit, &component_filename),
+            &path_buf![component_filename.as_str(), *component],
+            Path::new(&*dest),
+        )?;
+    }
 
-    // download libstd.
+    // download rust-std for every toolchain.
     for target in rust_std_targets {
         let rust_std_filename = format!("rust-std-nightly-{}", target);
         download_tar_xz(
@@ -218,7 +229,12 @@ fn run() -> Result<(), Error> {
     }
 
     let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
-    let rustc_filename = format!("rustc-nightly-{}", host);
+
+    let components = args
+        .components
+        .iter()
+        .map(|s| &**s)
+        .collect::<Vec<_>>();
 
     let rust_std_targets = args
         .targets
@@ -258,8 +274,9 @@ fn run() -> Result<(), Error> {
             &toolchains_path,
             &commit,
             args.alt,
-            &rustc_filename,
+            &host,
             &rust_std_targets,
+            &components,
         ) {
             eprintln!("skipping {} due to failure:\n{:?}", commit, e);
         }
