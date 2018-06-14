@@ -11,7 +11,9 @@ cache: cargo
 script:
   - cargo install --debug --force
   - >
-      RUST_COMMIT=$(rustup-toolchain-install-master --github-token $GITHUB_TOKEN) &&
-      echo $RUST_COMMIT &&
-      rustc +"$RUST_COMMIT" -vV &&
-      rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT";
+      if [ -n "$GITHUB_TOKEN" ]; then
+        RUST_COMMIT=$(rustup-toolchain-install-master --github-token "$GITHUB_TOKEN") &&
+        echo $RUST_COMMIT &&
+        rustc +"$RUST_COMMIT" -vV &&
+        rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT";
+      fi
