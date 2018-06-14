@@ -100,12 +100,12 @@ fn download_tar_xz(
 
         let err = stderr();
         let mut lock = err.lock();
-        let mut bar = ProgressBar::on(lock, length);
-        bar.set_units(Units::Bytes);
-        bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
+        let mut progress_bar = ProgressBar::on(lock, length);
+        progress_bar.set_units(Units::Bytes);
+        progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
 
         {
-            let response = TeeReader::new(response, &mut bar);
+            let response = TeeReader::new(response, &mut progress_bar);
             let response = XzDecoder::new(response);
             for entry in Archive::new(response).entries()? {
                 let mut entry = entry?;
@@ -118,26 +118,30 @@ fn download_tar_xz(
             }
         }
 
-        bar.finish_print("completed");
+        progress_bar.finish_print("completed");
     }
 
     Ok(())
+}
+
+struct Toolchain<'a> {
+    commit: &'a str,
+    alt: bool,
+    host_target: &'a str,
+    rust_std_targets: &'a [&'a str],
+    components: &'a [&'a str],
 }
 
 fn install_single_toolchain(
     client: Option<&Client>,
     prefix: &str,
     toolchains_path: &Path,
-    commit: &str,
-    alt: bool,
-    host_target: &str,
-    rust_std_targets: &[&str],
-    components: &[&str],
+    toolchain: &Toolchain,
 ) -> Result<(), Error> {
-    let dest = if alt {
-        Cow::Owned(format!("{}-alt", commit))
+    let dest = if toolchain.alt {
+        Cow::Owned(format!("{}-alt", toolchain.commit))
     } else {
-        Cow::Borrowed(commit)
+        Cow::Borrowed(toolchain.commit)
     };
     let toolchain_path = toolchains_path.join(&*dest);
     if toolchain_path.is_dir() {
@@ -146,22 +150,28 @@ fn install_single_toolchain(
     }
 
     // download every component except rust-std.
-    for component in once(&"rustc").chain(components.iter()) {
-        let component_filename = format!("{}-nightly-{}", component, host_target);
+    for component in once(&"rustc").chain(toolchain.components) {
+        let component_filename = format!("{}-nightly-{}", component, toolchain.host_target);
         download_tar_xz(
             client,
-            &format!("{}/{}/{}.tar.xz", prefix, commit, &component_filename),
-            &path_buf![component_filename.as_str(), *component],
+            &format!(
+                "{}/{}/{}.tar.xz",
+                prefix, toolchain.commit, &component_filename
+            ),
+            &path_buf![&component_filename, *component],
             Path::new(&*dest),
         )?;
     }
 
     // download rust-std for every toolchain.
-    for target in rust_std_targets {
+    for target in toolchain.rust_std_targets {
         let rust_std_filename = format!("rust-std-nightly-{}", target);
         download_tar_xz(
             client,
-            &format!("{}/{}/{}.tar.xz", prefix, commit, rust_std_filename),
+            &format!(
+                "{}/{}/{}.tar.xz",
+                prefix, toolchain.commit, rust_std_filename
+            ),
             &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
             &path_buf![&dest, "lib"],
         )?;
@@ -230,11 +240,7 @@ fn run() -> Result<(), Error> {
 
     let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
 
-    let components = args
-        .components
-        .iter()
-        .map(|s| &**s)
-        .collect::<Vec<_>>();
+    let components = args.components.iter().map(|s| &**s).collect::<Vec<_>>();
 
     let rust_std_targets = args
         .targets
@@ -272,11 +278,13 @@ fn run() -> Result<(), Error> {
             dry_run_client,
             &prefix,
             &toolchains_path,
-            &commit,
-            args.alt,
-            &host,
-            &rust_std_targets,
-            &components,
+            &Toolchain {
+                commit: &commit,
+                alt: args.alt,
+                host_target: &host,
+                rust_std_targets: &rust_std_targets,
+                components: &components,
+            },
         ) {
             eprintln!("skipping {} due to failure:\n{:?}", commit, e);
         }
