@@ -12,7 +12,7 @@ extern crate xz2;
 
 use std::borrow::Cow;
 use std::env::set_current_dir;
-use std::fs::{create_dir_all, rename};
+use std::fs::{create_dir_all, remove_dir_all, rename};
 use std::io::{stderr, stdout, Write};
 use std::iter::once;
 use std::path::{Path, PathBuf};
@@ -36,6 +36,9 @@ struct Args {
                 if omitted, the latest master commit will be installed"
     )]
     commits: Vec<String>,
+
+    #[structopt(short = "n", long = "name", help = "the name to call the toolchain")]
+    name: Option<String>,
 
     #[structopt(
         short = "a", long = "alt", help = "download the alt build instead of normal build"
@@ -75,6 +78,9 @@ struct Args {
 
     #[structopt(long = "dry-run", help = "Only log the URLs, without downloading the artifacts")]
     dry_run: bool,
+
+    #[structopt(long = "force", short = "f", help = "Replace an existing toolchain of the same name")]
+    force: bool,
 }
 
 macro_rules! path_buf {
@@ -126,10 +132,10 @@ fn download_tar_xz(
 
 struct Toolchain<'a> {
     commit: &'a str,
-    alt: bool,
     host_target: &'a str,
     rust_std_targets: &'a [&'a str],
     components: &'a [&'a str],
+    dest: Cow<'a, String>,
 }
 
 fn install_single_toolchain(
@@ -137,16 +143,19 @@ fn install_single_toolchain(
     prefix: &str,
     toolchains_path: &Path,
     toolchain: &Toolchain,
+    force: bool
 ) -> Result<(), Error> {
-    let dest = if toolchain.alt {
-        Cow::Owned(format!("{}-alt", toolchain.commit))
-    } else {
-        Cow::Borrowed(toolchain.commit)
-    };
-    let toolchain_path = toolchains_path.join(&*dest);
+
+    let toolchain_path = toolchains_path.join(&*toolchain.dest);
     if toolchain_path.is_dir() {
-        eprintln!("toolchain `{}` is already installed", dest);
-        return Ok(());
+        if force {
+            if client.is_some() {
+                remove_dir_all(&toolchain_path)?;
+            }
+        } else {
+            eprintln!("toolchain `{}` is already installed", toolchain.dest);
+            return Ok(());
+        }
     }
 
     // download every component except rust-std.
@@ -159,7 +168,7 @@ fn install_single_toolchain(
                 prefix, toolchain.commit, &component_filename
             ),
             &path_buf![&component_filename, *component],
-            Path::new(&*dest),
+            Path::new(&*toolchain.dest),
         )?;
     }
 
@@ -173,18 +182,18 @@ fn install_single_toolchain(
                 prefix, toolchain.commit, rust_std_filename
             ),
             &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
-            &path_buf![&dest, "lib"],
+            &path_buf![&toolchain.dest, "lib"],
         )?;
     }
 
     // install.
     if client.is_some() {
-        rename(&*dest, toolchain_path)?;
-        eprintln!("toolchain `{}` is successfully installed!", dest);
+        rename(&*toolchain.dest, toolchain_path)?;
+        eprintln!("toolchain `{}` is successfully installed!", toolchain.dest);
     } else {
         eprintln!(
             "toolchain `{}` will be installed to `{}` on real run",
-            dest,
+            toolchain.dest,
             toolchain_path.display()
         );
     }
@@ -238,6 +247,11 @@ fn run() -> Result<(), Error> {
         exit(1);
     }
 
+    if args.commits.len() > 1 && args.name.is_some() {
+        eprintln!("name argument can only be provided with a single commit");
+        exit(1);
+    }
+
     let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
 
     let components = args.components.iter().map(|s| &**s).collect::<Vec<_>>();
@@ -274,17 +288,25 @@ fn run() -> Result<(), Error> {
 
     let dry_run_client = if args.dry_run { None } else { Some(&client) };
     for commit in args.commits {
+        let dest = if let Some(name) = args.name.as_ref() {
+            Cow::Borrowed(name)
+        } else if args.alt {
+            Cow::Owned(format!("{}-alt", commit))
+        } else {
+            Cow::Borrowed(&commit)
+        };
         if let Err(e) = install_single_toolchain(
             dry_run_client,
             &prefix,
             &toolchains_path,
             &Toolchain {
                 commit: &commit,
-                alt: args.alt,
                 host_target: &host,
                 rust_std_targets: &rust_std_targets,
                 components: &components,
+                dest, 
             },
+            args.force
         ) {
             eprintln!("skipping {} due to failure:\n{:?}", commit, e);
         }
