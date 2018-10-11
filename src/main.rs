@@ -18,6 +18,7 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::time::Duration;
+use std::process::Command;
 
 use failure::Error;
 use pbr::{ProgressBar, Units};
@@ -203,8 +204,27 @@ fn install_single_toolchain(
 }
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
-    eprint!("fetching master commit hash... ");
+    eprintln!("fetching master commit hash... ");
+    match fetch_master_commit_via_git() {
+        Ok(hash) => return Ok(hash),
+        Err(e) => eprint!("unable to fetch master commit via git, fallback to HTTP. Error: {}", e),
+    }
 
+    fetch_master_commit_via_http(client, github_token)
+}
+
+fn fetch_master_commit_via_git() -> Result<String, Error> {
+    let mut output = Command::new("git")
+        .args(&["ls-remote", "https://github.com/rust-lang/rust.git", "master"])
+        .output()?;
+    ensure!(output.status.success(), "git ls-remote exited with error");
+    ensure!(output.stdout.get(..40).map_or(false, |h| h.iter().all(|c| c.is_ascii_hexdigit())), "git ls-remote does not return a commit");
+
+    output.stdout.truncate(40);
+    Ok(unsafe { String::from_utf8_unchecked(output.stdout) })
+}
+
+fn fetch_master_commit_via_http(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
     let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
     req = req.header(ACCEPT, "application/vnd.github.VERSION.sha");
     if let Some(token) = github_token {
