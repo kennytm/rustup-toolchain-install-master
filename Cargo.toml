@@ -19,7 +19,7 @@ is-it-maintained-open-issues = { repository = "kennytm/rustup-toolchain-install-
 failure = "0.1"
 home = "0.3"
 pbr = "1"
-reqwest = "0.8"
+reqwest = "0.9"
 structopt = "0.2"
 tar = "0.4"
 tee = "0.1"

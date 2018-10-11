@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use failure::Error;
 use pbr::{ProgressBar, Units};
-use reqwest::header::{Accept, Authorization, ContentLength};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
 use reqwest::{Client, ClientBuilder, Proxy};
 use structopt::StructOpt;
 use tar::Archive;
@@ -100,8 +100,9 @@ fn download_tar_xz(
 
         let length = response
             .headers()
-            .get::<ContentLength>()
-            .map(|h| h.0)
+            .get(CONTENT_LENGTH)
+            .and_then(|h| h.to_str().ok())
+            .and_then(|h| h.parse().ok())
             .unwrap_or(0);
 
         let err = stderr();
@@ -205,11 +206,9 @@ fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<St
     eprint!("fetching master commit hash... ");
 
     let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
-    req.header(Accept(vec![
-        "application/vnd.github.VERSION.sha".parse().unwrap(),
-    ]));
+    req = req.header(ACCEPT, "application/vnd.github.VERSION.sha");
     if let Some(token) = github_token {
-        req.header(Authorization(format!("token {}", token)));
+        req = req.header(AUTHORIZATION, format!("token {}", token));
     }
     let master_commit = req.send()?.error_for_status()?.text()?;
     if master_commit.len() == 40
@@ -233,7 +232,7 @@ fn run() -> Result<(), Error> {
 
     let mut client_builder = ClientBuilder::new();
     if let Some(proxy) = args.proxy {
-        client_builder.proxy(Proxy::all(&proxy)?);
+        client_builder = client_builder.proxy(Proxy::all(&proxy)?);
     }
     let client = client_builder.build()?;
 
@@ -304,7 +303,7 @@ fn run() -> Result<(), Error> {
                 host_target: &host,
                 rust_std_targets: &rust_std_targets,
                 components: &components,
-                dest, 
+                dest,
             },
             args.force
         ) {
