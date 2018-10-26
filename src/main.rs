@@ -3,7 +3,6 @@ extern crate failure;
 extern crate home;
 extern crate pbr;
 extern crate reqwest;
-#[macro_use]
 extern crate structopt;
 extern crate tar;
 extern crate tee;
