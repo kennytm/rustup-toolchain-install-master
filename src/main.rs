@@ -25,6 +25,7 @@ use failure::{Fail, Error, err_msg, ResultExt};
 use pbr::{ProgressBar, Units};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
 use reqwest::{Client, ClientBuilder, Proxy};
+use reqwest::StatusCode;
 use structopt::StructOpt;
 use tar::Archive;
 use tee::TeeReader;
@@ -97,11 +98,23 @@ fn download_tar_xz(
     url: &str,
     src: &Path,
     dest: &Path,
+    commit: &str,
+    component: &str,
+    target: &str,
 ) -> Result<(), Error> {
     eprintln!("downloading <{}>...", url);
 
     if let Some(client) = client {
-        let response = client.get(url).send()?.error_for_status()?;
+        let response = client.get(url).send()?;
+
+        match response.status() {
+            StatusCode::OK => {}
+            StatusCode::NOT_FOUND => bail!(
+                "missing component `{}` on toolchain `{}` for target `{}`",
+                component, commit, target,
+            ),
+            status => bail!("received status {} for GET {}", status, url),
+        };
 
         let length = response
             .headers()
@@ -175,6 +188,9 @@ fn install_single_toolchain(
             ),
             &path_buf![&component_filename, *component],
             Path::new(&*toolchain.dest),
+            toolchain.commit,
+            component,
+            toolchain.host_target,
         )?;
     }
 
@@ -189,6 +205,9 @@ fn install_single_toolchain(
             ),
             &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
             &path_buf![&toolchain.dest, "lib"],
+            toolchain.commit,
+            "rust-std",
+            target,
         )?;
     }
 
