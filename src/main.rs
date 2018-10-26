@@ -19,7 +19,7 @@ use std::process::exit;
 use std::time::Duration;
 use std::process::Command;
 
-use failure::Error;
+use failure::{Error, err_msg};
 use pbr::{ProgressBar, Units};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
 use reqwest::{Client, ClientBuilder, Proxy};
@@ -81,6 +81,9 @@ struct Args {
 
     #[structopt(long = "force", short = "f", help = "Replace an existing toolchain of the same name")]
     force: bool,
+
+    #[structopt(long = "keep-going", short = "k", help = "Continue downloading toolchains even if some of them failed")]
+    keep_going: bool,
 }
 
 macro_rules! path_buf {
@@ -305,6 +308,7 @@ fn run() -> Result<(), Error> {
     }
 
     let dry_run_client = if args.dry_run { None } else { Some(&client) };
+    let mut failed = false;
     for commit in args.commits {
         let dest = if let Some(name) = args.name.as_ref() {
             Cow::Borrowed(name)
@@ -313,7 +317,8 @@ fn run() -> Result<(), Error> {
         } else {
             Cow::Borrowed(&commit)
         };
-        if let Err(e) = install_single_toolchain(
+
+        let result = install_single_toolchain(
             dry_run_client,
             &prefix,
             &toolchains_path,
@@ -325,12 +330,23 @@ fn run() -> Result<(), Error> {
                 dest,
             },
             args.force
-        ) {
-            eprintln!("skipping {} due to failure:\n{:?}", commit, e);
+        );
+
+        match result {
+            Err(ref err) if args.keep_going => {
+                eprintln!("skipping {} due to failure:\n{:?}", commit, err);
+                failed = true;
+            }
+            res => res?,
         }
     }
 
-    Ok(())
+    // Return the error only after downloading the toolchains that didn't fail
+    if failed {
+        Err(err_msg("failed to download some toolchains"))
+    } else {
+        Ok(())
+    }
 }
 
 fn main() {
