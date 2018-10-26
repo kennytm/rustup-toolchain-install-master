@@ -1,3 +1,4 @@
+extern crate ansi_term;
 #[macro_use]
 extern crate failure;
 extern crate home;
@@ -19,7 +20,8 @@ use std::process::exit;
 use std::time::Duration;
 use std::process::Command;
 
-use failure::{Error, err_msg};
+use ansi_term::Color::{Red, Yellow};
+use failure::{Fail, Error, err_msg, ResultExt};
 use pbr::{ProgressBar, Units};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
 use reqwest::{Client, ClientBuilder, Proxy};
@@ -207,9 +209,10 @@ fn install_single_toolchain(
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
     eprintln!("fetching master commit hash... ");
-    match fetch_master_commit_via_git() {
-        Ok(hash) => return Ok(hash),
-        Err(e) => eprint!("unable to fetch master commit via git, fallback to HTTP. Error: {}", e),
+    let res = fetch_master_commit_via_git()
+        .context("unable to fetch master commit via git, falling back to HTTP");
+    if let Err(err) = res {
+        report_warn(&err);
     }
 
     fetch_master_commit_via_http(client, github_token)
@@ -261,16 +264,14 @@ fn run() -> Result<(), Error> {
     let rustup_home = home::rustup_home().expect("$RUSTUP_HOME is undefined?");
     let toolchains_path = rustup_home.join("toolchains");
     if !toolchains_path.is_dir() {
-        eprintln!(
+        bail!(
             "`{}` is not a directory. please reinstall rustup.",
             toolchains_path.display()
         );
-        exit(1);
     }
 
     if args.commits.len() > 1 && args.name.is_some() {
-        eprintln!("name argument can only be provided with a single commit");
-        exit(1);
+        return Err(err_msg("name argument can only be provided with a single commit"));
     }
 
     let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
@@ -332,12 +333,15 @@ fn run() -> Result<(), Error> {
             args.force
         );
 
-        match result {
-            Err(ref err) if args.keep_going => {
-                eprintln!("skipping {} due to failure:\n{:?}", commit, err);
+        if args.keep_going {
+            if let Err(err) = result {
+                report_warn(
+                    &err.context(format!("skipping toolchain `{}` due to a failure", commit))
+                );
                 failed = true;
             }
-            res => res?,
+        } else {
+            result?;
         }
     }
 
@@ -349,6 +353,24 @@ fn run() -> Result<(), Error> {
     }
 }
 
+fn report_error(err: &Fail) {
+    eprintln!("{} {}", Red.bold().paint("error:"), err);
+    for cause in err.iter_causes() {
+        eprintln!("{} {}", Red.bold().paint("caused by:"), cause);
+    }
+    exit(1);
+}
+
+fn report_warn(warn: &Fail) {
+    eprintln!("{} {}", Yellow.bold().paint("warn:"), warn);
+    for cause in warn.iter_causes() {
+        eprintln!("{} {}", Yellow.bold().paint("caused by:"), cause);
+    }
+    eprintln!("");
+}
+
 fn main() {
-    run().unwrap();
+    if let Err(err) = run() {
+        report_error(err.as_fail());
+    }
 }
