@@ -1,9 +1,9 @@
+extern crate ansi_term;
 #[macro_use]
 extern crate failure;
 extern crate home;
 extern crate pbr;
 extern crate reqwest;
-#[macro_use]
 extern crate structopt;
 extern crate tar;
 extern crate tee;
@@ -20,10 +20,12 @@ use std::process::exit;
 use std::time::Duration;
 use std::process::Command;
 
-use failure::Error;
+use ansi_term::Color::{Red, Yellow};
+use failure::{Fail, Error, err_msg, ResultExt};
 use pbr::{ProgressBar, Units};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
 use reqwest::{Client, ClientBuilder, Proxy};
+use reqwest::StatusCode;
 use structopt::StructOpt;
 use tar::Archive;
 use tee::TeeReader;
@@ -82,6 +84,9 @@ struct Args {
 
     #[structopt(long = "force", short = "f", help = "Replace an existing toolchain of the same name")]
     force: bool,
+
+    #[structopt(long = "keep-going", short = "k", help = "Continue downloading toolchains even if some of them failed")]
+    keep_going: bool,
 }
 
 macro_rules! path_buf {
@@ -93,11 +98,23 @@ fn download_tar_xz(
     url: &str,
     src: &Path,
     dest: &Path,
+    commit: &str,
+    component: &str,
+    target: &str,
 ) -> Result<(), Error> {
     eprintln!("downloading <{}>...", url);
 
     if let Some(client) = client {
-        let response = client.get(url).send()?.error_for_status()?;
+        let response = client.get(url).send()?;
+
+        match response.status() {
+            StatusCode::OK => {}
+            StatusCode::NOT_FOUND => bail!(
+                "missing component `{}` on toolchain `{}` for target `{}`",
+                component, commit, target,
+            ),
+            status => bail!("received status {} for GET {}", status, url),
+        };
 
         let length = response
             .headers()
@@ -171,6 +188,9 @@ fn install_single_toolchain(
             ),
             &path_buf![&component_filename, *component],
             Path::new(&*toolchain.dest),
+            toolchain.commit,
+            component,
+            toolchain.host_target,
         )?;
     }
 
@@ -185,6 +205,9 @@ fn install_single_toolchain(
             ),
             &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
             &path_buf![&toolchain.dest, "lib"],
+            toolchain.commit,
+            "rust-std",
+            target,
         )?;
     }
 
@@ -205,9 +228,10 @@ fn install_single_toolchain(
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
     eprintln!("fetching master commit hash... ");
-    match fetch_master_commit_via_git() {
-        Ok(hash) => return Ok(hash),
-        Err(e) => eprint!("unable to fetch master commit via git, fallback to HTTP. Error: {}", e),
+    let res = fetch_master_commit_via_git()
+        .context("unable to fetch master commit via git, falling back to HTTP");
+    if let Err(err) = res {
+        report_warn(&err);
     }
 
     fetch_master_commit_via_http(client, github_token)
@@ -259,16 +283,14 @@ fn run() -> Result<(), Error> {
     let rustup_home = home::rustup_home().expect("$RUSTUP_HOME is undefined?");
     let toolchains_path = rustup_home.join("toolchains");
     if !toolchains_path.is_dir() {
-        eprintln!(
+        bail!(
             "`{}` is not a directory. please reinstall rustup.",
             toolchains_path.display()
         );
-        exit(1);
     }
 
     if args.commits.len() > 1 && args.name.is_some() {
-        eprintln!("name argument can only be provided with a single commit");
-        exit(1);
+        return Err(err_msg("name argument can only be provided with a single commit"));
     }
 
     let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
@@ -306,6 +328,7 @@ fn run() -> Result<(), Error> {
     }
 
     let dry_run_client = if args.dry_run { None } else { Some(&client) };
+    let mut failed = false;
     for commit in args.commits {
         let dest = if let Some(name) = args.name.as_ref() {
             Cow::Borrowed(name)
@@ -314,7 +337,8 @@ fn run() -> Result<(), Error> {
         } else {
             Cow::Borrowed(&commit)
         };
-        if let Err(e) = install_single_toolchain(
+
+        let result = install_single_toolchain(
             dry_run_client,
             &prefix,
             &toolchains_path,
@@ -326,14 +350,46 @@ fn run() -> Result<(), Error> {
                 dest,
             },
             args.force
-        ) {
-            eprintln!("skipping {} due to failure:\n{:?}", commit, e);
+        );
+
+        if args.keep_going {
+            if let Err(err) = result {
+                report_warn(
+                    &err.context(format!("skipping toolchain `{}` due to a failure", commit))
+                );
+                failed = true;
+            }
+        } else {
+            result?;
         }
     }
 
-    Ok(())
+    // Return the error only after downloading the toolchains that didn't fail
+    if failed {
+        Err(err_msg("failed to download some toolchains"))
+    } else {
+        Ok(())
+    }
+}
+
+fn report_error(err: &Fail) {
+    eprintln!("{} {}", Red.bold().paint("error:"), err);
+    for cause in err.iter_causes() {
+        eprintln!("{} {}", Red.bold().paint("caused by:"), cause);
+    }
+    exit(1);
+}
+
+fn report_warn(warn: &Fail) {
+    eprintln!("{} {}", Yellow.bold().paint("warn:"), warn);
+    for cause in warn.iter_causes() {
+        eprintln!("{} {}", Yellow.bold().paint("caused by:"), cause);
+    }
+    eprintln!("");
 }
 
 fn main() {
-    run().unwrap();
+    if let Err(err) = run() {
+        report_error(err.as_fail());
+    }
 }
