@@ -75,6 +75,12 @@ struct Args {
     )]
     components: Vec<String>,
 
+    #[structopt(
+        long = "channel",
+        help = "specify the channel of the commits instead of detecting it automatically"
+    )]
+    channel: Option<String>,
+
     #[structopt(short = "p", long = "proxy", help = "the HTTP proxy for all download requests")]
     proxy: Option<String>,
 
@@ -166,6 +172,7 @@ fn install_single_toolchain(
     prefix: &str,
     toolchains_path: &Path,
     toolchain: &Toolchain,
+    override_channel: Option<&str>,
     force: bool
 ) -> Result<(), Error> {
     let toolchain_path = toolchains_path.join(&*toolchain.dest);
@@ -180,7 +187,11 @@ fn install_single_toolchain(
         }
     }
 
-    let channel = get_channel(client, prefix, &toolchain.commit)?;
+    let channel = if let Some(channel) = override_channel {
+        channel
+    } else {
+        get_channel(client, prefix, &toolchain.commit)?
+    };
 
     // download every component except rust-std.
     for component in once(&"rustc").chain(toolchain.components) {
@@ -377,6 +388,7 @@ fn run() -> Result<(), Error> {
                 components: &components,
                 dest,
             },
+            args.channel.as_ref().map(|c| c.as_str()),
             args.force
         );
 

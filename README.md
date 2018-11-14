@@ -18,6 +18,7 @@ FLAGS:
     -V, --version       Prints version information
 
 OPTIONS:
+    --channel <channel>                  specify the channel of the commits instead of detecting it automatically
     -c, --component <components>...      additional components to install, besides rustc and rust-std
         --github-token <github_token>    An authorization token to access GitHub APIs
     -i, --host <host>                    the triples of host platform
