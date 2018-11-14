@@ -17,15 +17,15 @@ use std::io::{stderr, stdout, Write};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::exit;
-use std::time::Duration;
 use std::process::Command;
+use std::time::Duration;
 
 use ansi_term::Color::{Red, Yellow};
-use failure::{Fail, Error, err_msg, ResultExt};
+use failure::{err_msg, Error, Fail, ResultExt};
 use pbr::{ProgressBar, Units};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
-use reqwest::{Client, ClientBuilder, Proxy};
 use reqwest::StatusCode;
+use reqwest::{Client, ClientBuilder, Proxy};
 use structopt::StructOpt;
 use tar::Archive;
 use tee::TeeReader;
@@ -46,7 +46,9 @@ struct Args {
     name: Option<String>,
 
     #[structopt(
-        short = "a", long = "alt", help = "download the alt build instead of normal build"
+        short = "a",
+        long = "alt",
+        help = "download the alt build instead of normal build"
     )]
     alt: bool,
 
@@ -81,19 +83,37 @@ struct Args {
     )]
     channel: Option<String>,
 
-    #[structopt(short = "p", long = "proxy", help = "the HTTP proxy for all download requests")]
+    #[structopt(
+        short = "p",
+        long = "proxy",
+        help = "the HTTP proxy for all download requests"
+    )]
     proxy: Option<String>,
 
-    #[structopt(long = "github-token", help = "An authorization token to access GitHub APIs")]
+    #[structopt(
+        long = "github-token",
+        help = "An authorization token to access GitHub APIs"
+    )]
     github_token: Option<String>,
 
-    #[structopt(long = "dry-run", help = "Only log the URLs, without downloading the artifacts")]
+    #[structopt(
+        long = "dry-run",
+        help = "Only log the URLs, without downloading the artifacts"
+    )]
     dry_run: bool,
 
-    #[structopt(long = "force", short = "f", help = "Replace an existing toolchain of the same name")]
+    #[structopt(
+        long = "force",
+        short = "f",
+        help = "Replace an existing toolchain of the same name"
+    )]
     force: bool,
 
-    #[structopt(long = "keep-going", short = "k", help = "Continue downloading toolchains even if some of them failed")]
+    #[structopt(
+        long = "keep-going",
+        short = "k",
+        help = "Continue downloading toolchains even if some of them failed"
+    )]
     keep_going: bool,
 }
 
@@ -120,7 +140,10 @@ fn download_tar_xz(
             StatusCode::OK => {}
             StatusCode::NOT_FOUND => bail!(
                 "missing component `{}` on toolchain `{}` on channel `{}` for target `{}`",
-                component, commit, channel, target,
+                component,
+                commit,
+                channel,
+                target,
             ),
             status => bail!("received status {} for GET {}", status, url),
         };
@@ -173,7 +196,7 @@ fn install_single_toolchain(
     toolchains_path: &Path,
     toolchain: &Toolchain,
     override_channel: Option<&str>,
-    force: bool
+    force: bool,
 ) -> Result<(), Error> {
     let toolchain_path = toolchains_path.join(&*toolchain.dest);
     if toolchain_path.is_dir() {
@@ -195,10 +218,7 @@ fn install_single_toolchain(
 
     // download every component except rust-std.
     for component in once(&"rustc").chain(toolchain.components) {
-        let component_filename = format!(
-            "{}-{}-{}",
-            component, channel, toolchain.host_target
-        );
+        let component_filename = format!("{}-{}-{}", component, channel, toolchain.host_target);
         download_tar_xz(
             maybe_dry_client,
             &format!(
@@ -260,16 +280,29 @@ fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<St
 
 fn fetch_master_commit_via_git() -> Result<String, Error> {
     let mut output = Command::new("git")
-        .args(&["ls-remote", "https://github.com/rust-lang/rust.git", "master"])
+        .args(&[
+            "ls-remote",
+            "https://github.com/rust-lang/rust.git",
+            "master",
+        ])
         .output()?;
     ensure!(output.status.success(), "git ls-remote exited with error");
-    ensure!(output.stdout.get(..40).map_or(false, |h| h.iter().all(|c| c.is_ascii_hexdigit())), "git ls-remote does not return a commit");
+    ensure!(
+        output
+            .stdout
+            .get(..40)
+            .map_or(false, |h| h.iter().all(|c| c.is_ascii_hexdigit())),
+        "git ls-remote does not return a commit"
+    );
 
     output.stdout.truncate(40);
     Ok(unsafe { String::from_utf8_unchecked(output.stdout) })
 }
 
-fn fetch_master_commit_via_http(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
+fn fetch_master_commit_via_http(
+    client: &Client,
+    github_token: Option<&str>,
+) -> Result<String, Error> {
     let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
     req = req.header(ACCEPT, "application/vnd.github.VERSION.sha");
     if let Some(token) = github_token {
@@ -328,7 +361,9 @@ fn run() -> Result<(), Error> {
     }
 
     if args.commits.len() > 1 && args.name.is_some() {
-        return Err(err_msg("name argument can only be provided with a single commit"));
+        return Err(err_msg(
+            "name argument can only be provided with a single commit",
+        ));
     }
 
     let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
@@ -389,13 +424,13 @@ fn run() -> Result<(), Error> {
                 dest,
             },
             args.channel.as_ref().map(|c| c.as_str()),
-            args.force
+            args.force,
         );
 
         if args.keep_going {
             if let Err(err) = result {
                 report_warn(
-                    &err.context(format!("skipping toolchain `{}` due to a failure", commit))
+                    &err.context(format!("skipping toolchain `{}` due to a failure", commit)),
                 );
                 failed = true;
             }
