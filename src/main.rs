@@ -32,6 +32,8 @@ use tee::TeeReader;
 use tempfile::{tempdir, tempdir_in};
 use xz2::read::XzDecoder;
 
+static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
+
 #[derive(StructOpt, Debug)]
 struct Args {
     #[structopt(
@@ -73,6 +75,12 @@ struct Args {
     )]
     components: Vec<String>,
 
+    #[structopt(
+        long = "channel",
+        help = "specify the channel of the commits instead of detecting it automatically"
+    )]
+    channel: Option<String>,
+
     #[structopt(short = "p", long = "proxy", help = "the HTTP proxy for all download requests")]
     proxy: Option<String>,
 
@@ -100,6 +108,7 @@ fn download_tar_xz(
     dest: &Path,
     commit: &str,
     component: &str,
+    channel: &str,
     target: &str,
 ) -> Result<(), Error> {
     eprintln!("downloading <{}>...", url);
@@ -110,8 +119,8 @@ fn download_tar_xz(
         match response.status() {
             StatusCode::OK => {}
             StatusCode::NOT_FOUND => bail!(
-                "missing component `{}` on toolchain `{}` for target `{}`",
-                component, commit, target,
+                "missing component `{}` on toolchain `{}` on channel `{}` for target `{}`",
+                component, commit, channel, target,
             ),
             status => bail!("received status {} for GET {}", status, url),
         };
@@ -158,17 +167,18 @@ struct Toolchain<'a> {
 }
 
 fn install_single_toolchain(
-    client: Option<&Client>,
+    client: &Client,
+    maybe_dry_client: Option<&Client>,
     prefix: &str,
     toolchains_path: &Path,
     toolchain: &Toolchain,
+    override_channel: Option<&str>,
     force: bool
 ) -> Result<(), Error> {
-
     let toolchain_path = toolchains_path.join(&*toolchain.dest);
     if toolchain_path.is_dir() {
         if force {
-            if client.is_some() {
+            if maybe_dry_client.is_some() {
                 remove_dir_all(&toolchain_path)?;
             }
         } else {
@@ -177,11 +187,20 @@ fn install_single_toolchain(
         }
     }
 
+    let channel = if let Some(channel) = override_channel {
+        channel
+    } else {
+        get_channel(client, prefix, &toolchain.commit)?
+    };
+
     // download every component except rust-std.
     for component in once(&"rustc").chain(toolchain.components) {
-        let component_filename = format!("{}-nightly-{}", component, toolchain.host_target);
+        let component_filename = format!(
+            "{}-{}-{}",
+            component, channel, toolchain.host_target
+        );
         download_tar_xz(
-            client,
+            maybe_dry_client,
             &format!(
                 "{}/{}/{}.tar.xz",
                 prefix, toolchain.commit, &component_filename
@@ -190,15 +209,16 @@ fn install_single_toolchain(
             Path::new(&*toolchain.dest),
             toolchain.commit,
             component,
+            channel,
             toolchain.host_target,
         )?;
     }
 
     // download rust-std for every toolchain.
     for target in toolchain.rust_std_targets {
-        let rust_std_filename = format!("rust-std-nightly-{}", target);
+        let rust_std_filename = format!("rust-std-{}-{}", channel, target);
         download_tar_xz(
-            client,
+            maybe_dry_client,
             &format!(
                 "{}/{}/{}.tar.xz",
                 prefix, toolchain.commit, rust_std_filename
@@ -207,12 +227,13 @@ fn install_single_toolchain(
             &path_buf![&toolchain.dest, "lib"],
             toolchain.commit,
             "rust-std",
+            channel,
             target,
         )?;
     }
 
     // install.
-    if client.is_some() {
+    if maybe_dry_client.is_some() {
         rename(&*toolchain.dest, toolchain_path)?;
         eprintln!("toolchain `{}` is successfully installed!", toolchain.dest);
     } else {
@@ -269,6 +290,23 @@ fn fetch_master_commit_via_http(client: &Client, github_token: Option<&str>) -> 
     } else {
         bail!("unable to parse `{}` as a commit", master_commit)
     }
+}
+
+fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<&'static str, Error> {
+    eprintln!("detecting the channel of the `{}` toolchain...", commit);
+
+    for channel in SUPPORTED_CHANNELS {
+        let url = format!("{}/{}/rust-src-{}.tar.xz", prefix, commit, channel);
+        let resp = client.head(&url).send()?;
+
+        match resp.status() {
+            StatusCode::OK => return Ok(channel),
+            StatusCode::NOT_FOUND | StatusCode::FORBIDDEN => {}
+            status => bail!("unexpected status code {} for HEAD {}", status, url),
+        }
+    }
+
+    bail!("toolchain `{}` doesn't exist in any channel", commit);
 }
 
 fn run() -> Result<(), Error> {
@@ -339,6 +377,7 @@ fn run() -> Result<(), Error> {
         };
 
         let result = install_single_toolchain(
+            &client,
             dry_run_client,
             &prefix,
             &toolchains_path,
@@ -349,6 +388,7 @@ fn run() -> Result<(), Error> {
                 components: &components,
                 dest,
             },
+            args.channel.as_ref().map(|c| c.as_str()),
             args.force
         );
 
