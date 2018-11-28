@@ -218,7 +218,11 @@ fn install_single_toolchain(
 
     // download every component except rust-std.
     for component in once(&"rustc").chain(toolchain.components) {
-        let component_filename = format!("{}-{}-{}", component, channel, toolchain.host_target);
+        let component_filename = if *component == "rust-src" {
+            format!("{}-{}", component, channel)
+        } else {
+            format!("{}-{}-{}", component, channel, toolchain.host_target)
+        };
         download_tar_xz(
             maybe_dry_client,
             &format!(
