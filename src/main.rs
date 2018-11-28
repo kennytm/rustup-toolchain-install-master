@@ -234,7 +234,7 @@ fn install_single_toolchain(
         )?;
     }
 
-    // download rust-std for every toolchain.
+    // download rust-std for every target.
     for target in toolchain.rust_std_targets {
         let rust_std_filename = format!("rust-std-{}-{}", channel, target);
         download_tar_xz(
