@@ -18,13 +18,13 @@ FLAGS:
     -V, --version       Prints version information
 
 OPTIONS:
-    --channel <channel>                  specify the channel of the commits instead of detecting it automatically
+        --channel <channel>              specify the channel of the commits instead of detecting it automatically
     -c, --component <components>...      additional components to install, besides rustc and rust-std
         --github-token <github_token>    An authorization token to access GitHub APIs
     -i, --host <host>                    the triples of host platform
     -n, --name <name>                    the name to call the toolchain
     -p, --proxy <proxy>                  the HTTP proxy for all download requests
-    -s, --server <server>                the server path which stores the compilers [default: https://s3-us-west-1.amazonaws.com/rust-lang-ci2]
+    -s, --server <server>                the server path which stores the compilers [default: https://rust-lang-ci2.s3-us-west-1.amazonaws.com]
     -t, --targets <targets>...           additional target platforms to install, besides the host platform
 
 ARGS:
@@ -48,9 +48,9 @@ Download a normal toolchain:
 
 ```console
 $ rustup-toolchain-install-master def3269a71be2e737cad27418a3dad9f5bd6cd32
-downloading <https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rustc-nightly-x86_64-apple-darwin.tar.xz>...
+downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rustc-nightly-x86_64-apple-darwin.tar.xz>...
 completed
-downloading <https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rust-std-nightly-x86_64-apple-darwin.tar.xz>...
+downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rust-std-nightly-x86_64-apple-darwin.tar.xz>...
 completed
 toolchain `def3269a71be2e737cad27418a3dad9f5bd6cd32` is successfully installed!
 ```

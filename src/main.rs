@@ -56,7 +56,7 @@ struct Args {
         short = "s",
         long = "server",
         help = "the server path which stores the compilers",
-        default_value = "https://s3-us-west-1.amazonaws.com/rust-lang-ci2"
+        default_value = "https://rust-lang-ci2.s3-us-west-1.amazonaws.com"
     )]
     server: String,
 
