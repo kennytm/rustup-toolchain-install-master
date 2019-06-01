@@ -2,12 +2,13 @@
 name = "rustup-toolchain-install-master"
 version = "1.6.1"
 authors = ["kennytm <kennytm@gmail.com>"]
-description = "Install master rustc toolchain into rustup"
-repository = "https://github.com/kennytm/rustup-toolchain-install-master"
-readme = "README.md"
-keywords = ["rustup"]
 categories = ["development-tools"]
+edition = "2018"
+keywords = ["rustup"]
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/kennytm/rustup-toolchain-install-master"
+description = "Install master rustc toolchain into rustup"
 
 [badges]
 maintenance = { status = "passively-maintained" }
@@ -16,6 +17,7 @@ is-it-maintained-issue-resolution = { repository = "kennytm/rustup-toolchain-ins
 is-it-maintained-open-issues = { repository = "kennytm/rustup-toolchain-install-master" }
 
 [dependencies]
+ansi_term = "0.11"
 failure = "0.1"
 home = "0.3"
 pbr = "1"
@@ -25,4 +27,3 @@ tar = "0.4"
 tee = "0.1"
 tempfile = "3"
 xz2 = "0.1"
-ansi_term = "0.11"

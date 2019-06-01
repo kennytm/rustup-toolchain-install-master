@@ -1,4 +1,3 @@
-sudo: false
 language: rust
 rust:
   - stable
@@ -6,10 +5,14 @@ rust:
 git:
   depth: 1
 
-cache: cargo
+cache:
+  directories:
+    - "$HOME/.cargo"
+before_cache:
+  - rm -rf "$HOME/.cargo/registry"
 
 script:
-  - cargo install --debug --force
+  - cargo install --debug --force --path .
   - >
       if [ -n "$GITHUB_TOKEN" ]; then
         RUST_COMMIT=$(rustup-toolchain-install-master --github-token "$GITHUB_TOKEN") &&
