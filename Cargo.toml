@@ -8,6 +8,7 @@ readme = "README.md"
 keywords = ["rustup"]
 categories = ["development-tools"]
 license = "MIT"
+edition = "2018"
 
 [badges]
 maintenance = { status = "passively-maintained" }

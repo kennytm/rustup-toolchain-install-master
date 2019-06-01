@@ -156,7 +156,7 @@ fn download_tar_xz(
             .unwrap_or(0);
 
         let err = stderr();
-        let mut lock = err.lock();
+        let lock = err.lock();
         let mut progress_bar = ProgressBar::on(lock, length);
         progress_bar.set_units(Units::Bytes);
         progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
@@ -452,7 +452,7 @@ fn run() -> Result<(), Error> {
     }
 }
 
-fn report_error(err: &Fail) {
+fn report_error(err: &dyn Fail) {
     eprintln!("{} {}", Red.bold().paint("error:"), err);
     for cause in err.iter_causes() {
         eprintln!("{} {}", Red.bold().paint("caused by:"), cause);
@@ -460,7 +460,7 @@ fn report_error(err: &Fail) {
     exit(1);
 }
 
-fn report_warn(warn: &Fail) {
+fn report_warn(warn: &dyn Fail) {
     eprintln!("{} {}", Yellow.bold().paint("warn:"), warn);
     for cause in warn.iter_causes() {
         eprintln!("{} {}", Yellow.bold().paint("caused by:"), cause);
