@@ -1,15 +1,7 @@
-extern crate ansi_term;
+#![warn(rust_2018_idioms)]
+
 #[macro_use]
 extern crate failure;
-extern crate home;
-extern crate pbr;
-extern crate reqwest;
-extern crate structopt;
-extern crate tar;
-extern crate tee;
-extern crate tempfile;
-extern crate xz2;
-
 use std::borrow::Cow;
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, remove_dir_all, rename};
@@ -194,7 +186,7 @@ fn install_single_toolchain(
     maybe_dry_client: Option<&Client>,
     prefix: &str,
     toolchains_path: &Path,
-    toolchain: &Toolchain,
+    toolchain: &Toolchain<'_>,
     override_channel: Option<&str>,
     force: bool,
 ) -> Result<(), Error> {
