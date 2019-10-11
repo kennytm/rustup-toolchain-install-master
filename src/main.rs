@@ -58,7 +58,7 @@ struct Args {
     #[structopt(
         short = "t",
         long = "targets",
-        help = "additional target platforms to install, besides the host platform"
+        help = "additional target platforms to install rust-std for, besides the host platform"
     )]
     targets: Vec<String>,
 
