@@ -58,7 +58,7 @@ struct Args {
     #[structopt(
         short = "t",
         long = "targets",
-        help = "additional target platforms to install, besides the host platform"
+        help = "additional target platforms to install rust-std for, besides the host platform"
     )]
     targets: Vec<String>,
 
@@ -216,13 +216,19 @@ fn install_single_toolchain(
         } else {
             format!("{}-{}-{}", component, channel, toolchain.host_target)
         };
+        let component_src_dir = if *component == "rustc-dev" {
+            // rustc-dev is available per-target; we only install the host
+            path_buf![&component_filename, &format!("{}-{}", component, toolchain.host_target)]
+        } else {
+            path_buf![&component_filename, *component]
+        };
         download_tar_xz(
             maybe_dry_client,
             &format!(
                 "{}/{}/{}.tar.xz",
                 prefix, toolchain.commit, &component_filename
             ),
-            &path_buf![&component_filename, *component],
+            &component_src_dir,
             Path::new(&*toolchain.dest),
             toolchain.commit,
             component,
