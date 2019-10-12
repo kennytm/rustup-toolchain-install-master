@@ -153,6 +153,8 @@ fn download_tar_xz(
         progress_bar.set_units(Units::Bytes);
         progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
 
+        let mut extracted_something = false;
+
         {
             let response = TeeReader::new(response, &mut progress_bar);
             let response = XzDecoder::new(response);
@@ -164,7 +166,12 @@ fn download_tar_xz(
                 };
                 create_dir_all(dest_path.parent().unwrap())?;
                 entry.unpack(dest_path)?;
+                extracted_something = true;
             }
+        }
+
+        if !extracted_something {
+            bail!("found no file in folder `{}` when extracting component `{}`", src.display(), component);
         }
 
         progress_bar.finish_print("completed");
