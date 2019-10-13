@@ -5,6 +5,11 @@ rust:
 git:
   depth: 1
 
+os:
+  - linux
+  - osx
+  - windows
+
 cache:
   directories:
     - "$HOME/.cargo"
