@@ -286,13 +286,12 @@ fn install_single_toolchain(
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
     eprintln!("fetching master commit hash... ");
-    let res = fetch_master_commit_via_git()
-        .context("unable to fetch master commit via git, falling back to HTTP");
-    if let Err(err) = res {
-        report_warn(&err);
-    }
-
-    fetch_master_commit_via_http(client, github_token)
+    fetch_master_commit_via_git()
+        .context("unable to fetch master commit via git, falling back to HTTP")
+        .or_else(|err| {
+            report_warn(&err);
+            fetch_master_commit_via_http(client, github_token)
+        })
 }
 
 fn fetch_master_commit_via_git() -> Result<String, Error> {
