@@ -15,7 +15,7 @@ use std::time::Duration;
 use ansi_term::Color::{Red, Yellow};
 use failure::{err_msg, Error, Fail, ResultExt};
 use pbr::{ProgressBar, Units};
-use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
 use reqwest::StatusCode;
 use reqwest::{Client, ClientBuilder, Proxy};
 use structopt::StructOpt;
@@ -171,7 +171,11 @@ fn download_tar_xz(
         }
 
         if !extracted_something {
-            bail!("found no file in folder `{}` when extracting component `{}`", src.display(), component);
+            bail!(
+                "found no file in folder `{}` when extracting component `{}`",
+                src.display(),
+                component
+            );
         }
 
         progress_bar.finish_print("completed");
@@ -225,7 +229,10 @@ fn install_single_toolchain(
         };
         let component_src_dir = if *component == "rustc-dev" {
             // rustc-dev is available per-target; we only install the host
-            path_buf![&component_filename, &format!("{}-{}", component, toolchain.host_target)]
+            path_buf![
+                &component_filename,
+                &format!("{}-{}", component, toolchain.host_target)
+            ]
         } else {
             path_buf![&component_filename, *component]
         };
@@ -355,7 +362,13 @@ fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<&'static s
 fn run() -> Result<(), Error> {
     let mut args = Args::from_args();
 
-    let mut client_builder = ClientBuilder::new();
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        USER_AGENT,
+        HeaderValue::from_static("rustup-toolchain-install-master"),
+    );
+
+    let mut client_builder = ClientBuilder::new().default_headers(headers);
     if let Some(proxy) = args.proxy {
         client_builder = client_builder.proxy(Proxy::all(&proxy)?);
     }
