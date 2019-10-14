@@ -319,12 +319,31 @@ fn fetch_master_commit_via_http(
     client: &Client,
     github_token: Option<&str>,
 ) -> Result<String, Error> {
-    let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
-    req = req.header(ACCEPT, "application/vnd.github.VERSION.sha");
+    static URL: &str = "https://api.github.com/repos/rust-lang/rust/commits/master";
+    static MEDIA_TYPE: &str = "application/vnd.github.VERSION.sha";
+    let mut req = client.get(URL).header(ACCEPT, MEDIA_TYPE);
     if let Some(token) = github_token {
         req = req.header(AUTHORIZATION, format!("token {}", token));
     }
-    let master_commit = req.send()?.error_for_status()?.text()?;
+    let mut response = req.send()?;
+    match response.status() {
+        StatusCode::OK => {}
+        status @ StatusCode::FORBIDDEN => {
+            let rate_limit = response
+                .headers()
+                .get("X-RateLimit-Remaining")
+                .and_then(|r| r.to_str().ok())
+                .and_then(|r| r.parse::<u32>().ok())
+                .unwrap_or(0);
+            if rate_limit == 0 {
+                bail!("GitHub API rate limit exceeded");
+            } else {
+                bail!("status: {} with rate limit: {}", status, rate_limit);
+            }
+        }
+        status => bail!("received status {} for URL {}", status, URL),
+    }
+    let master_commit = response.text()?;
     if master_commit.len() == 40
         && master_commit
             .chars()
