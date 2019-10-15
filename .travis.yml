@@ -4,6 +4,12 @@ rust:
 
 git:
   depth: 1
+  quiet: true
+
+os:
+  - linux
+  - osx
+  - windows
 
 cache:
   directories:
@@ -12,11 +18,9 @@ before_cache:
   - rm -rf "$HOME/.cargo/registry"
 
 script:
-  - cargo install --debug --force --path .
-  - >
-      if [ -n "$GITHUB_TOKEN" ]; then
-        RUST_COMMIT=$(rustup-toolchain-install-master --github-token "$GITHUB_TOKEN") &&
-        echo $RUST_COMMIT &&
-        rustc +"$RUST_COMMIT" -vV &&
-        rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT";
-      fi
+  - cargo build
+  - if [ -n "$GITHUB_TOKEN" ]; then FEATURES=('--github-token' "$GITHUB_TOKEN"); else FEATURES=(); fi
+  - RUST_COMMIT=$(git ls-remote https://github.com/rust-lang/rust master | awk '{print $1}')
+  - cargo run -- "${FEATURES[@]}"
+  - rustc +"$RUST_COMMIT" -vV
+  - rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT"

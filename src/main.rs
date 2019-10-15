@@ -15,7 +15,7 @@ use std::time::Duration;
 use ansi_term::Color::{Red, Yellow};
 use failure::{err_msg, Error, Fail, ResultExt};
 use pbr::{ProgressBar, Units};
-use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
 use reqwest::StatusCode;
 use reqwest::{Client, ClientBuilder, Proxy};
 use structopt::StructOpt;
@@ -171,7 +171,11 @@ fn download_tar_xz(
         }
 
         if !extracted_something {
-            bail!("found no file in folder `{}` when extracting component `{}`", src.display(), component);
+            bail!(
+                "found no file in folder `{}` when extracting component `{}`",
+                src.display(),
+                component
+            );
         }
 
         progress_bar.finish_print("completed");
@@ -225,7 +229,10 @@ fn install_single_toolchain(
         };
         let component_src_dir = if *component == "rustc-dev" {
             // rustc-dev is available per-target; we only install the host
-            path_buf![&component_filename, &format!("{}-{}", component, toolchain.host_target)]
+            path_buf![
+                &component_filename,
+                &format!("{}-{}", component, toolchain.host_target)
+            ]
         } else {
             path_buf![&component_filename, *component]
         };
@@ -279,13 +286,12 @@ fn install_single_toolchain(
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
     eprintln!("fetching master commit hash... ");
-    let res = fetch_master_commit_via_git()
-        .context("unable to fetch master commit via git, falling back to HTTP");
-    if let Err(err) = res {
-        report_warn(&err);
-    }
-
-    fetch_master_commit_via_http(client, github_token)
+    fetch_master_commit_via_git()
+        .context("unable to fetch master commit via git, falling back to HTTP")
+        .or_else(|err| {
+            report_warn(&err);
+            fetch_master_commit_via_http(client, github_token)
+        })
 }
 
 fn fetch_master_commit_via_git() -> Result<String, Error> {
@@ -313,12 +319,31 @@ fn fetch_master_commit_via_http(
     client: &Client,
     github_token: Option<&str>,
 ) -> Result<String, Error> {
-    let mut req = client.get("https://api.github.com/repos/rust-lang/rust/commits/master");
-    req = req.header(ACCEPT, "application/vnd.github.VERSION.sha");
+    static URL: &str = "https://api.github.com/repos/rust-lang/rust/commits/master";
+    static MEDIA_TYPE: &str = "application/vnd.github.VERSION.sha";
+    let mut req = client.get(URL).header(ACCEPT, MEDIA_TYPE);
     if let Some(token) = github_token {
         req = req.header(AUTHORIZATION, format!("token {}", token));
     }
-    let master_commit = req.send()?.error_for_status()?.text()?;
+    let mut response = req.send()?;
+    match response.status() {
+        StatusCode::OK => {}
+        status @ StatusCode::FORBIDDEN => {
+            let rate_limit = response
+                .headers()
+                .get("X-RateLimit-Remaining")
+                .and_then(|r| r.to_str().ok())
+                .and_then(|r| r.parse::<u32>().ok())
+                .unwrap_or(0);
+            if rate_limit == 0 {
+                bail!("GitHub API rate limit exceeded");
+            } else {
+                bail!("status: {} with rate limit: {}", status, rate_limit);
+            }
+        }
+        status => bail!("received status {} for URL {}", status, URL),
+    }
+    let master_commit = response.text()?;
     if master_commit.len() == 40
         && master_commit
             .chars()
@@ -355,7 +380,13 @@ fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<&'static s
 fn run() -> Result<(), Error> {
     let mut args = Args::from_args();
 
-    let mut client_builder = ClientBuilder::new();
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        USER_AGENT,
+        HeaderValue::from_static("rustup-toolchain-install-master"),
+    );
+
+    let mut client_builder = ClientBuilder::new().default_headers(headers);
     if let Some(proxy) = args.proxy {
         client_builder = client_builder.proxy(Proxy::all(&proxy)?);
     }
