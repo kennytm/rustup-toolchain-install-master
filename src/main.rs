@@ -1,7 +1,5 @@
 #![warn(rust_2018_idioms)]
 
-#[macro_use]
-extern crate failure;
 use std::borrow::Cow;
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, remove_dir_all, rename};
@@ -13,7 +11,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use ansi_term::Color::{Red, Yellow};
-use failure::{err_msg, Error, Fail, ResultExt};
+use failure::{bail, ensure, err_msg, Error, Fail, ResultExt};
 use pbr::{ProgressBar, Units};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
 use reqwest::StatusCode;
@@ -178,7 +176,8 @@ fn download_tar_xz(
             );
         }
 
-        progress_bar.finish_print("completed");
+        progress_bar.finish();
+        eprintln!();
     }
 
     Ok(())
