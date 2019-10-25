@@ -20,12 +20,12 @@ FLAGS:
 OPTIONS:
         --channel <channel>              specify the channel of the commits instead of detecting it automatically
     -c, --component <components>...      additional components to install, besides rustc and rust-std
-        --github-token <github_token>    An authorization token to access GitHub APIs
+        --github-token <github-token>    An authorization token to access GitHub APIs
     -i, --host <host>                    the triples of host platform
     -n, --name <name>                    the name to call the toolchain
     -p, --proxy <proxy>                  the HTTP proxy for all download requests
     -s, --server <server>                the server path which stores the compilers [default: https://rust-lang-ci2.s3-us-west-1.amazonaws.com]
-    -t, --targets <targets>...           additional target platforms to install, besides the host platform
+    -t, --targets <targets>...           additional target platforms to install rust-std for, besides the host platform
 
 ARGS:
     <commits>...    full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest master
@@ -47,31 +47,32 @@ Usage
 Download a normal toolchain:
 
 ```console
-$ rustup-toolchain-install-master def3269a71be2e737cad27418a3dad9f5bd6cd32
-downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rustc-nightly-x86_64-apple-darwin.tar.xz>...
-completed
-downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/def3269a71be2e737cad27418a3dad9f5bd6cd32/rust-std-nightly-x86_64-apple-darwin.tar.xz>...
-completed
-toolchain `def3269a71be2e737cad27418a3dad9f5bd6cd32` is successfully installed!
+$ rustup-toolchain-install-master 10a52c25cad963986cace7a22c167363afca0d74
+detecting the channel of the `10a52c25cad963986cace7a22c167363afca0d74` toolchain...
+downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/10a52c25cad963986cace7a22c167363afca0d74/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz>...
+56.96 MB / 56.96 MB [=======================================] 100.00 % 10.20 MB/s
+downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/10a52c25cad963986cace7a22c167363afca0d74/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz>...
+17.97 MB / 17.97 MB [=======================================] 100.00 % 9.95 MB/s
+toolchain `10a52c25cad963986cace7a22c167363afca0d74` is successfully installed!
 ```
 
 Use it:
 
 ```console
-$ rustc +def3269a71be2e737cad27418a3dad9f5bd6cd32 -vV
-rustc 1.25.0-nightly (def3269a7 2018-01-30)
+$ rustc +10a52c25cad963986cace7a22c167363afca0d74 -vV
+rustc 1.40.0-nightly (10a52c25c 2019-10-24)
 binary: rustc
-commit-hash: def3269a71be2e737cad27418a3dad9f5bd6cd32
-commit-date: 2018-01-30
-host: x86_64-apple-darwin
-release: 1.25.0-nightly
-LLVM version: 4.0
+commit-hash: 10a52c25cad963986cace7a22c167363afca0d74
+commit-date: 2019-10-24
+host: x86_64-unknown-linux-gnu
+release: 1.40.0-nightly
+LLVM version: 9.0
 ```
 
 Remove it using `rustup`:
 
 ```console
-$ rustup uninstall def3269a71be2e737cad27418a3dad9f5bd6cd32
-info: uninstalling toolchain 'def3269a71be2e737cad27418a3dad9f5bd6cd32'
-info: toolchain 'def3269a71be2e737cad27418a3dad9f5bd6cd32' uninstalled
+$ rustup uninstall 10a52c25cad963986cace7a22c167363afca0d74
+info: uninstalling toolchain '10a52c25cad963986cace7a22c167363afca0d74'
+info: toolchain '10a52c25cad963986cace7a22c167363afca0d74' uninstalled
 ```
