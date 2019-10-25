@@ -1,6 +1,5 @@
-language: rust
-rust:
-  - stable
+dist: xenial
+language: shell
 
 git:
   depth: 1
@@ -14,8 +13,27 @@ os:
 cache:
   directories:
     - "$HOME/.cargo"
+    - target
 before_cache:
-  - rm -rf "$HOME/.cargo/registry"
+  - |
+    cargo install \
+      --debug \
+      --force \
+      --git https://github.com/matthiaskrgr/cargo-cache \
+      --no-default-features \
+      --features ci-autoclean \
+      --bin cargo-cache \
+      -- \
+      cargo-cache
+  - cargo cache
+
+matrix:
+  fast_finish: true
+
+before_install:
+  - curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=stable --profile=minimal
+  - export PATH="$HOME/.cargo/bin:$PATH"
+  - export CARGO_TARGET_DIR="$TRAVIS_BUILD_DIR/target"
 
 script:
   - cargo build
