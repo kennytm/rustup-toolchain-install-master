@@ -5,11 +5,6 @@ git:
   depth: 1
   quiet: true
 
-os:
-  - linux
-  - osx
-  - windows
-
 cache:
   directories:
     - "$HOME/.cargo"
@@ -26,12 +21,22 @@ before_cache:
       -- \
       cargo-cache
   - cargo cache
+  - find ~/.cargo/bin ! -type d -exec strip {} \;
 
 matrix:
   fast_finish: true
+  include:
+    - os: linux
+    - os: osx
+    - os: windows
+    - name: rustfmt
+      install:
+        - rustup component add rustfmt
+      script:
+        - cargo fmt --all -- --check;
 
 before_install:
-  - curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain=stable --profile=minimal
+  - curl -sSf https://build.travis-ci.com/files/rustup-init.sh | sh -s -- -y --default-toolchain=stable --profile=minimal
   - export PATH="$HOME/.cargo/bin:$PATH"
   - export CARGO_TARGET_DIR="$TRAVIS_BUILD_DIR/target"
 

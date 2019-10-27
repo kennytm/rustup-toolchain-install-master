@@ -1,8 +1,7 @@
 #![warn(rust_2018_idioms)]
 
-use std::borrow::Cow;
 use std::env::set_current_dir;
-use std::fs::{create_dir_all, remove_dir_all, rename};
+use std::fs::{create_dir_all, rename};
 use std::io::{stderr, stdout, Write};
 use std::iter::once;
 use std::path::{Path, PathBuf};
@@ -13,6 +12,7 @@ use std::time::Duration;
 use ansi_term::Color::{Red, Yellow};
 use failure::{bail, ensure, err_msg, Error, Fail, ResultExt};
 use pbr::{ProgressBar, Units};
+use remove_dir_all::remove_dir_all;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
 use reqwest::StatusCode;
 use reqwest::{Client, ClientBuilder, Proxy};
@@ -25,6 +25,7 @@ use xz2::read::XzDecoder;
 static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
 
 #[derive(StructOpt, Debug)]
+#[structopt(set_term_width(0))]
 struct Args {
     #[structopt(
         help = "full commit hashes of the rustc builds, all 40 digits are needed; \
@@ -107,14 +108,9 @@ struct Args {
     keep_going: bool,
 }
 
-macro_rules! path_buf {
-    ($($e:expr),*$(,)*) => { [$($e),*].iter().collect::<PathBuf>() }
-}
-
 fn download_tar_xz(
     client: Option<&Client>,
     url: &str,
-    src: &Path,
     dest: &Path,
     commit: &str,
     component: &str,
@@ -122,7 +118,6 @@ fn download_tar_xz(
     target: &str,
 ) -> Result<(), Error> {
     eprintln!("downloading <{}>...", url);
-
     if let Some(client) = client {
         let response = client.get(url).send()?;
 
@@ -151,29 +146,46 @@ fn download_tar_xz(
         progress_bar.set_units(Units::Bytes);
         progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
 
-        let mut extracted_something = false;
+        let response = TeeReader::new(response, &mut progress_bar);
+        let response = XzDecoder::new(response);
+        for entry in Archive::new(response).entries()? {
+            let mut entry = entry?;
+            let relpath = entry.path()?;
 
-        {
-            let response = TeeReader::new(response, &mut progress_bar);
-            let response = XzDecoder::new(response);
-            for entry in Archive::new(response).entries()? {
-                let mut entry = entry?;
-                let dest_path = match entry.path()?.strip_prefix(src) {
-                    Ok(sub_path) => dest.join(sub_path),
-                    Err(_) => continue,
-                };
-                create_dir_all(dest_path.parent().unwrap())?;
-                entry.unpack(dest_path)?;
-                extracted_something = true;
+            let mut components = relpath.components();
+
+            // Reject path components that are not normal (.|..|/| etc)
+            for part in components.clone() {
+                match part {
+                    std::path::Component::Normal(_) => {}
+                    _ => bail!("bad path in tar: {}", relpath.display()),
+                }
             }
-        }
 
-        if !extracted_something {
-            bail!(
-                "found no file in folder `{}` when extracting component `{}`",
-                src.display(),
-                component
-            );
+            // Throw away the first two path components: our root was supplied
+            components.next();
+            components.next();
+
+            let full_path = dest.join(&components.as_path());
+            if full_path == dest {
+                // The tmp dir code makes the root dir for us.
+                continue;
+            }
+
+            // Bail out if we get hard links, device nodes or any other unusual content
+            // - it is most likely an attack, as rusts cross-platform nature precludes
+            // such artifacts
+            let kind = entry.header().entry_type();
+
+            match kind {
+                tar::EntryType::Directory => {
+                    create_dir_all(full_path)?;
+                }
+                tar::EntryType::Regular => {
+                    entry.unpack(full_path)?;
+                }
+                _ => bail!("unsupported tar entry: {:?}", kind),
+            }
         }
 
         progress_bar.finish();
@@ -183,12 +195,13 @@ fn download_tar_xz(
     Ok(())
 }
 
+#[derive(Debug)]
 struct Toolchain<'a> {
     commit: &'a str,
     host_target: &'a str,
     rust_std_targets: &'a [&'a str],
     components: &'a [&'a str],
-    dest: Cow<'a, String>,
+    dest: PathBuf,
 }
 
 fn install_single_toolchain(
@@ -200,14 +213,17 @@ fn install_single_toolchain(
     override_channel: Option<&str>,
     force: bool,
 ) -> Result<(), Error> {
-    let toolchain_path = toolchains_path.join(&*toolchain.dest);
+    let toolchain_path = toolchains_path.join(&toolchain.dest);
     if toolchain_path.is_dir() {
         if force {
             if maybe_dry_client.is_some() {
                 remove_dir_all(&toolchain_path)?;
             }
         } else {
-            eprintln!("toolchain `{}` is already installed", toolchain.dest);
+            eprintln!(
+                "toolchain `{}` is already installed",
+                toolchain.dest.display()
+            );
             return Ok(());
         }
     }
@@ -215,7 +231,7 @@ fn install_single_toolchain(
     let channel = if let Some(channel) = override_channel {
         channel
     } else {
-        get_channel(client, prefix, &toolchain.commit)?
+        get_channel(client, prefix, toolchain.commit)?
     };
 
     // download every component except rust-std.
@@ -226,23 +242,13 @@ fn install_single_toolchain(
         } else {
             format!("{}-{}-{}", component, channel, toolchain.host_target)
         };
-        let component_src_dir = if *component == "rustc-dev" {
-            // rustc-dev is available per-target; we only install the host
-            path_buf![
-                &component_filename,
-                &format!("{}-{}", component, toolchain.host_target)
-            ]
-        } else {
-            path_buf![&component_filename, *component]
-        };
         download_tar_xz(
             maybe_dry_client,
             &format!(
                 "{}/{}/{}.tar.xz",
                 prefix, toolchain.commit, &component_filename
             ),
-            &component_src_dir,
-            Path::new(&*toolchain.dest),
+            &toolchain.dest,
             toolchain.commit,
             component,
             channel,
@@ -259,8 +265,7 @@ fn install_single_toolchain(
                 "{}/{}/{}.tar.xz",
                 prefix, toolchain.commit, rust_std_filename
             ),
-            &path_buf![&rust_std_filename, &format!("rust-std-{}", target), "lib"],
-            &path_buf![&toolchain.dest, "lib"],
+            &toolchain.dest,
             toolchain.commit,
             "rust-std",
             channel,
@@ -268,14 +273,17 @@ fn install_single_toolchain(
         )?;
     }
 
-    // install.
+    // install
     if maybe_dry_client.is_some() {
-        rename(&*toolchain.dest, toolchain_path)?;
-        eprintln!("toolchain `{}` is successfully installed!", toolchain.dest);
+        rename(&toolchain.dest, toolchain_path)?;
+        eprintln!(
+            "toolchain `{}` is successfully installed!",
+            toolchain.dest.display()
+        );
     } else {
         eprintln!(
             "toolchain `{}` will be installed to `{}` on real run",
-            toolchain.dest,
+            toolchain.dest.display(),
             toolchain_path.display()
         );
     }
@@ -406,7 +414,7 @@ fn run() -> Result<(), Error> {
         ));
     }
 
-    let host = args.host.as_ref().map(|s| &**s).unwrap_or(env!("HOST"));
+    let host = args.host.as_ref().map_or(env!("HOST"), |s| &*s);
 
     let components = args.components.iter().map(|s| &**s).collect::<Vec<_>>();
 
@@ -419,8 +427,11 @@ fn run() -> Result<(), Error> {
 
     let toolchains_dir = {
         let path = rustup_home.join("tmp");
+        if !path.exists() {
+            create_dir_all(&path)?;
+        }
         if path.is_dir() {
-            tempdir_in(path)
+            tempdir_in(&path)
         } else {
             tempdir()
         }
@@ -444,11 +455,11 @@ fn run() -> Result<(), Error> {
     let mut failed = false;
     for commit in args.commits {
         let dest = if let Some(name) = args.name.as_ref() {
-            Cow::Borrowed(name)
+            PathBuf::from(name)
         } else if args.alt {
-            Cow::Owned(format!("{}-alt", commit))
+            PathBuf::from(format!("{}-alt", commit))
         } else {
-            Cow::Borrowed(&commit)
+            PathBuf::from(&commit)
         };
 
         let result = install_single_toolchain(
@@ -458,12 +469,12 @@ fn run() -> Result<(), Error> {
             &toolchains_path,
             &Toolchain {
                 commit: &commit,
-                host_target: &host,
+                host_target: host,
                 rust_std_targets: &rust_std_targets,
                 components: &components,
                 dest,
             },
-            args.channel.as_ref().map(|c| c.as_str()),
+            args.channel.as_ref().map(|c| &**c),
             args.force,
         );
 
