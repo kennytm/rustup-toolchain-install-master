@@ -21,6 +21,7 @@ before_cache:
       -- \
       cargo-cache
   - cargo cache
+  - find ~/.cargo/bin ! -type d -exec strip {} \;
 
 matrix:
   fast_finish: true
