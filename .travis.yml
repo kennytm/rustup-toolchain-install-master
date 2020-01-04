@@ -33,7 +33,7 @@ matrix:
       install:
         - rustup component add rustfmt
       script:
-        - cargo fmt --all -- --check;
+        - cargo fmt -- --check;
 
 before_install:
   - curl -sSf https://build.travis-ci.com/files/rustup-init.sh | sh -s -- -y --default-toolchain=stable --profile=minimal
