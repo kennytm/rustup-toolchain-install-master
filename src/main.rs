@@ -13,9 +13,9 @@ use ansi_term::Color::{Red, Yellow};
 use failure::{bail, ensure, err_msg, Error, Fail, ResultExt};
 use pbr::{ProgressBar, Units};
 use remove_dir_all::remove_dir_all;
+use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
-use reqwest::StatusCode;
-use reqwest::{Client, ClientBuilder, Proxy};
+use reqwest::{Proxy, StatusCode};
 use structopt::StructOpt;
 use tar::Archive;
 use tee::TeeReader;
@@ -332,7 +332,7 @@ fn fetch_master_commit_via_http(
     if let Some(token) = github_token {
         req = req.header(AUTHORIZATION, format!("token {}", token));
     }
-    let mut response = req.send()?;
+    let response = req.send()?;
     match response.status() {
         StatusCode::OK => {}
         status @ StatusCode::FORBIDDEN => {
