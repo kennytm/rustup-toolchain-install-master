@@ -4,6 +4,7 @@ use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
 use std::io::{stderr, stdout, Write};
 use std::iter::once;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::process::Command;
@@ -414,14 +415,14 @@ fn run() -> Result<(), Error> {
         ));
     }
 
-    let host = args.host.as_ref().map_or(env!("HOST"), |s| &*s);
+    let host = args.host.as_deref().unwrap_or(env!("HOST"));
 
-    let components = args.components.iter().map(|s| &**s).collect::<Vec<_>>();
+    let components = args.components.iter().map(Deref::deref).collect::<Vec<_>>();
 
     let rust_std_targets = args
         .targets
         .iter()
-        .map(|s| &**s)
+        .map(Deref::deref)
         .chain(once(host))
         .collect::<Vec<_>>();
 
@@ -445,16 +446,14 @@ fn run() -> Result<(), Error> {
     );
 
     if args.commits.is_empty() {
-        args.commits.push(fetch_master_commit(
-            &client,
-            args.github_token.as_ref().map(|s| &**s),
-        )?);
+        args.commits
+            .push(fetch_master_commit(&client, args.github_token.as_deref())?);
     }
 
     let dry_run_client = if args.dry_run { None } else { Some(&client) };
     let mut failed = false;
     for commit in args.commits {
-        let dest = if let Some(name) = args.name.as_ref() {
+        let dest = if let Some(name) = args.name.as_deref() {
             PathBuf::from(name)
         } else if args.alt {
             PathBuf::from(format!("{}-alt", commit))
@@ -474,7 +473,7 @@ fn run() -> Result<(), Error> {
                 components: &components,
                 dest,
             },
-            args.channel.as_ref().map(|c| &**c),
+            args.channel.as_deref(),
             args.force,
         );
 
