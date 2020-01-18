@@ -2,7 +2,7 @@
 
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
-use std::io::{stderr, stdout, Write};
+use std::io::{self, stderr, stdout, Write};
 use std::iter::once;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -218,7 +218,10 @@ fn install_single_toolchain(
     if toolchain_path.is_dir() {
         if force {
             if maybe_dry_client.is_some() {
-                remove_dir_all(&toolchain_path)?;
+                match remove_dir_all(&toolchain_path) {
+                    Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
+                    _ => {}
+                }
             }
         } else {
             eprintln!(
