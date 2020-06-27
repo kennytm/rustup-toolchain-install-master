@@ -24,7 +24,7 @@ OPTIONS:
     -i, --host <host>                    the triples of host platform
     -n, --name <name>                    the name to call the toolchain
     -p, --proxy <proxy>                  the HTTP proxy for all download requests
-    -s, --server <server>                the server path which stores the compilers [default: https://rust-lang-ci2.s3-us-west-1.amazonaws.com]
+    -s, --server <server>                the server path which stores the compilers [default: https://ci-artifacts.rust-lang.org]
     -t, --targets <targets>...           additional target platforms to install rust-std for, besides the host platform
 
 ARGS:
@@ -47,32 +47,32 @@ Usage
 Download a normal toolchain:
 
 ```console
-$ rustup-toolchain-install-master 10a52c25cad963986cace7a22c167363afca0d74
-detecting the channel of the `10a52c25cad963986cace7a22c167363afca0d74` toolchain...
-downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/10a52c25cad963986cace7a22c167363afca0d74/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz>...
-56.96 MB / 56.96 MB [=======================================] 100.00 % 10.20 MB/s
-downloading <https://rust-lang-ci2.s3-us-west-1.amazonaws.com/rustc-builds/10a52c25cad963986cace7a22c167363afca0d74/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz>...
-17.97 MB / 17.97 MB [=======================================] 100.00 % 9.95 MB/s
-toolchain `10a52c25cad963986cace7a22c167363afca0d74` is successfully installed!
+$ rustup-toolchain-install-master 4fb54ed484e2239a3e9eff3be17df00d2a162be3
+detecting the channel of the `4fb54ed484e2239a3e9eff3be17df00d2a162be3` toolchain...
+downloading <https://ci-artifacts.rust-lang.org/rustc-builds/4fb54ed484e2239a3e9eff3be17df00d2a162be3/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz>...
+47.39 MB / 47.39 MB [=======================================] 100.00 % 10.20 MB/s
+downloading <https://ci-artifacts.rust-lang.org/rustc-builds/4fb54ed484e2239a3e9eff3be17df00d2a162be3/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz>...
+15.91 MB / 15.91 MB [=======================================] 100.00 % 9.95 MB/s
+toolchain `4fb54ed484e2239a3e9eff3be17df00d2a162be3` is successfully installed!
 ```
 
 Use it:
 
 ```console
-$ rustc +10a52c25cad963986cace7a22c167363afca0d74 -vV
-rustc 1.40.0-nightly (10a52c25c 2019-10-24)
+$ rustc +4fb54ed484e2239a3e9eff3be17df00d2a162be3 -vV
+rustc 1.46.0-nightly (4fb54ed48 2020-06-14)
 binary: rustc
-commit-hash: 10a52c25cad963986cace7a22c167363afca0d74
-commit-date: 2019-10-24
+commit-hash: 4fb54ed484e2239a3e9eff3be17df00d2a162be3
+commit-date: 2020-06-14
 host: x86_64-unknown-linux-gnu
-release: 1.40.0-nightly
-LLVM version: 9.0
+release: 1.46.0-nightly
+LLVM version: 10.0
 ```
 
 Remove it using `rustup`:
 
 ```console
-$ rustup uninstall 10a52c25cad963986cace7a22c167363afca0d74
-info: uninstalling toolchain '10a52c25cad963986cace7a22c167363afca0d74'
-info: toolchain '10a52c25cad963986cace7a22c167363afca0d74' uninstalled
+$ rustup uninstall 4fb54ed484e2239a3e9eff3be17df00d2a162be3
+info: uninstalling toolchain '4fb54ed484e2239a3e9eff3be17df00d2a162be3'
+info: toolchain '4fb54ed484e2239a3e9eff3be17df00d2a162be3' uninstalled
 ```
