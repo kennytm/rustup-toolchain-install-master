@@ -11,7 +11,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use ansi_term::Color::{Red, Yellow};
-use failure::{bail, ensure, err_msg, Error, Fail, ResultExt};
+use anyhow::{bail, ensure, Context, Error};
 use pbr::{ProgressBar, Units};
 use remove_dir_all::remove_dir_all;
 use reqwest::blocking::{Client, ClientBuilder};
@@ -410,7 +410,7 @@ fn run() -> Result<(), Error> {
     }
 
     if args.commits.len() > 1 && args.name.is_some() {
-        return Err(err_msg(
+        return Err(Error::msg(
             "name argument can only be provided with a single commit",
         ));
     }
@@ -491,23 +491,23 @@ fn run() -> Result<(), Error> {
 
     // Return the error only after downloading the toolchains that didn't fail
     if failed {
-        Err(err_msg("failed to download some toolchains"))
+        Err(Error::msg("failed to download some toolchains"))
     } else {
         Ok(())
     }
 }
 
-fn report_error(err: &dyn Fail) {
+fn report_error(err: &Error) {
     eprintln!("{} {}", Red.bold().paint("error:"), err);
-    for cause in err.iter_causes() {
+    for cause in err.chain().skip(1) {
         eprintln!("{} {}", Red.bold().paint("caused by:"), cause);
     }
     exit(1);
 }
 
-fn report_warn(warn: &dyn Fail) {
+fn report_warn(warn: &Error) {
     eprintln!("{} {}", Yellow.bold().paint("warn:"), warn);
-    for cause in warn.iter_causes() {
+    for cause in warn.chain().skip(1) {
         eprintln!("{} {}", Yellow.bold().paint("caused by:"), cause);
     }
     eprintln!("");
@@ -515,6 +515,6 @@ fn report_warn(warn: &dyn Fail) {
 
 fn main() {
     if let Err(err) = run() {
-        report_error(err.as_fail());
+        report_error(&err);
     }
 }
