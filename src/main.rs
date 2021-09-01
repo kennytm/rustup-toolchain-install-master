@@ -25,6 +25,7 @@ use xz2::read::XzDecoder;
 
 static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(StructOpt, Debug)]
 #[structopt(set_term_width(0))]
 struct Args {
@@ -315,7 +316,7 @@ fn fetch_master_commit_via_git() -> Result<String, Error> {
         output
             .stdout
             .get(..40)
-            .map_or(false, |h| h.iter().all(|c| c.is_ascii_hexdigit())),
+            .map_or(false, |h| h.iter().all(u8::is_ascii_hexdigit)),
         "git ls-remote does not return a commit"
     );
 
@@ -355,7 +356,7 @@ fn fetch_master_commit_via_http(
     if master_commit.len() == 40
         && master_commit
             .chars()
-            .all(|c| '0' <= c && c <= '9' || 'a' <= c && c <= 'f')
+            .all(|c| matches!(c, '0'..='9' | 'a'..='f'))
     {
         let out = stdout();
         let mut lock = out.lock();
@@ -510,7 +511,7 @@ fn report_warn(warn: &Error) {
     for cause in warn.chain().skip(1) {
         eprintln!("{} {}", Yellow.bold().paint("caused by:"), cause);
     }
-    eprintln!("");
+    eprintln!();
 }
 
 fn main() {
