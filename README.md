@@ -10,12 +10,13 @@ USAGE:
     rustup-toolchain-install-master [FLAGS] [OPTIONS] [--] [commits]...
 
 FLAGS:
-    -a, --alt           download the alt build instead of normal build
-        --dry-run       Only log the URLs, without downloading the artifacts
-    -f, --force         Replace an existing toolchain of the same name
-    -h, --help          Prints help information
-    -k, --keep-going    Continue downloading toolchains even if some of them failed
-    -V, --version       Prints version information
+    -a, --alt                     download the alt build instead of normal build
+        --dry-run                 Only log the URLs, without downloading the artifacts
+    -f, --force                   Replace an existing toolchain of the same name
+    -h, --help                    Prints help information
+    -k, --keep-going              Continue downloading toolchains even if some of them failed
+        --no-default-components   do not install rustc and rust-std component unless explicitly specified
+    -V, --version                 Prints version information
 
 OPTIONS:
         --channel <channel>              specify the channel of the commits instead of detecting it automatically

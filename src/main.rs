@@ -8,6 +8,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::process::Command;
+use std::slice;
 use std::time::Duration;
 
 use ansi_term::Color::{Red, Yellow};
@@ -69,6 +70,12 @@ struct Args {
         help = "additional components to install, besides rustc and rust-std"
     )]
     components: Vec<String>,
+
+    #[structopt(
+        long,
+        help = "do not install rustc and rust-std component unless explicitly specified"
+    )]
+    no_default_components: bool,
 
     #[structopt(
         long = "channel",
@@ -203,6 +210,7 @@ struct Toolchain<'a> {
     host_target: &'a str,
     rust_std_targets: &'a [&'a str],
     components: &'a [&'a str],
+    no_default_components: bool,
     dest: PathBuf,
 }
 
@@ -236,43 +244,40 @@ fn install_single_toolchain(
         get_channel(client, prefix, toolchain.commit)?
     };
 
-    // download every component except rust-std.
-    for component in once(&"rustc").chain(toolchain.components) {
-        let component_filename = if *component == "rust-src" {
-            // rust-src is the only target-independent component
-            format!("{}-{}", component, channel)
-        } else {
-            format!("{}-{}-{}", component, channel, toolchain.host_target)
-        };
-        download_tar_xz(
-            maybe_dry_client,
-            &format!(
-                "{}/{}/{}.tar.xz",
-                prefix, toolchain.commit, &component_filename
-            ),
-            &toolchain.dest,
-            toolchain.commit,
-            component,
-            channel,
-            toolchain.host_target,
-        )?;
+    let mut components = toolchain.components.to_vec();
+    if !toolchain.no_default_components {
+        components.insert(0, "rustc");
+        components.push("rust-std");
     }
 
-    // download rust-std for every target.
-    for target in toolchain.rust_std_targets {
-        let rust_std_filename = format!("rust-std-{}-{}", channel, target);
-        download_tar_xz(
-            maybe_dry_client,
-            &format!(
-                "{}/{}/{}.tar.xz",
-                prefix, toolchain.commit, rust_std_filename
-            ),
-            &toolchain.dest,
-            toolchain.commit,
-            "rust-std",
-            channel,
-            target,
-        )?;
+    for component in components {
+        let targets = if component == "rust-std" {
+            // download rust-std for every target
+            &toolchain.rust_std_targets
+        } else {
+            // otherwise just the host target
+            slice::from_ref(&toolchain.host_target)
+        };
+        for target in targets {
+            let component_filename = if component == "rust-src" {
+                // rust-src is the only target-independent component
+                format!("{}-{}", component, channel)
+            } else {
+                format!("{}-{}-{}", component, channel, target)
+            };
+            download_tar_xz(
+                maybe_dry_client,
+                &format!(
+                    "{}/{}/{}.tar.xz",
+                    prefix, toolchain.commit, &component_filename
+                ),
+                &toolchain.dest,
+                toolchain.commit,
+                component,
+                channel,
+                target,
+            )?;
+        }
     }
 
     // install
@@ -472,6 +477,7 @@ fn run() -> Result<(), Error> {
                 host_target: host,
                 rust_std_targets: &rust_std_targets,
                 components: &components,
+                no_default_components: args.no_default_components,
                 dest,
             },
             args.channel.as_deref(),
