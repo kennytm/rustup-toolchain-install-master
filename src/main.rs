@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use ansi_term::Color::{Red, Yellow};
 use anyhow::{bail, ensure, Context, Error};
-use clap::Parser;
+use clap::{crate_version, Parser};
 use pbr::{ProgressBar, Units};
 use remove_dir_all::remove_dir_all;
 use reqwest::blocking::{Client, ClientBuilder};
@@ -27,25 +27,25 @@ static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Parser, Debug)]
-#[structopt(term_width(0))]
+#[command(term_width(0), version(crate_version!()))]
 struct Args {
-    #[structopt(
+    #[arg(
         help = "full commit hashes of the rustc builds, all 40 digits are needed; \
                 if omitted, the latest master commit will be installed"
     )]
     commits: Vec<String>,
 
-    #[structopt(short = 'n', long = "name", help = "the name to call the toolchain")]
+    #[arg(short = 'n', long = "name", help = "the name to call the toolchain")]
     name: Option<String>,
 
-    #[structopt(
+    #[arg(
         short = 'a',
         long = "alt",
         help = "download the alt build instead of normal build"
     )]
     alt: bool,
 
-    #[structopt(
+    #[arg(
         short = 's',
         long = "server",
         help = "the server path which stores the compilers",
@@ -53,56 +53,56 @@ struct Args {
     )]
     server: String,
 
-    #[structopt(short = 'i', long = "host", help = "the triples of host platform")]
+    #[arg(short = 'i', long = "host", help = "the triples of host platform")]
     host: Option<String>,
 
-    #[structopt(
+    #[arg(
         short = 't',
         long = "targets",
         help = "additional target platforms to install rust-std for, besides the host platform"
     )]
     targets: Vec<String>,
 
-    #[structopt(
+    #[arg(
         short = 'c',
         long = "component",
         help = "additional components to install, besides rustc and rust-std"
     )]
     components: Vec<String>,
 
-    #[structopt(
+    #[arg(
         long = "channel",
         help = "specify the channel of the commits instead of detecting it automatically"
     )]
     channel: Option<String>,
 
-    #[structopt(
+    #[arg(
         short = 'p',
         long = "proxy",
         help = "the HTTP proxy for all download requests"
     )]
     proxy: Option<String>,
 
-    #[structopt(
+    #[arg(
         long = "github-token",
         help = "An authorization token to access GitHub APIs"
     )]
     github_token: Option<String>,
 
-    #[structopt(
+    #[arg(
         long = "dry-run",
         help = "Only log the URLs, without downloading the artifacts"
     )]
     dry_run: bool,
 
-    #[structopt(
+    #[arg(
         long = "force",
         short = 'f',
         help = "Replace an existing toolchain of the same name"
     )]
     force: bool,
 
-    #[structopt(
+    #[arg(
         long = "keep-going",
         short = 'k',
         help = "Continue downloading toolchains even if some of them failed"
