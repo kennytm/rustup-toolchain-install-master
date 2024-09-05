@@ -12,12 +12,12 @@ use std::time::Duration;
 
 use ansi_term::Color::{Red, Yellow};
 use anyhow::{bail, ensure, Context, Error};
+use clap::Parser;
 use pbr::{ProgressBar, Units};
 use remove_dir_all::remove_dir_all;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
 use reqwest::{Proxy, StatusCode};
-use structopt::StructOpt;
 use tar::Archive;
 use tee::TeeReader;
 use tempfile::{tempdir, tempdir_in};
@@ -26,8 +26,8 @@ use xz2::read::XzDecoder;
 static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
 
 #[allow(clippy::struct_excessive_bools)]
-#[derive(StructOpt, Debug)]
-#[structopt(set_term_width(0))]
+#[derive(Parser, Debug)]
+#[structopt(term_width(0))]
 struct Args {
     #[structopt(
         help = "full commit hashes of the rustc builds, all 40 digits are needed; \
@@ -35,36 +35,36 @@ struct Args {
     )]
     commits: Vec<String>,
 
-    #[structopt(short = "n", long = "name", help = "the name to call the toolchain")]
+    #[structopt(short = 'n', long = "name", help = "the name to call the toolchain")]
     name: Option<String>,
 
     #[structopt(
-        short = "a",
+        short = 'a',
         long = "alt",
         help = "download the alt build instead of normal build"
     )]
     alt: bool,
 
     #[structopt(
-        short = "s",
+        short = 's',
         long = "server",
         help = "the server path which stores the compilers",
         default_value = "https://ci-artifacts.rust-lang.org"
     )]
     server: String,
 
-    #[structopt(short = "i", long = "host", help = "the triples of host platform")]
+    #[structopt(short = 'i', long = "host", help = "the triples of host platform")]
     host: Option<String>,
 
     #[structopt(
-        short = "t",
+        short = 't',
         long = "targets",
         help = "additional target platforms to install rust-std for, besides the host platform"
     )]
     targets: Vec<String>,
 
     #[structopt(
-        short = "c",
+        short = 'c',
         long = "component",
         help = "additional components to install, besides rustc and rust-std"
     )]
@@ -77,7 +77,7 @@ struct Args {
     channel: Option<String>,
 
     #[structopt(
-        short = "p",
+        short = 'p',
         long = "proxy",
         help = "the HTTP proxy for all download requests"
     )]
@@ -97,14 +97,14 @@ struct Args {
 
     #[structopt(
         long = "force",
-        short = "f",
+        short = 'f',
         help = "Replace an existing toolchain of the same name"
     )]
     force: bool,
 
     #[structopt(
         long = "keep-going",
-        short = "k",
+        short = 'k',
         help = "Continue downloading toolchains even if some of them failed"
     )]
     keep_going: bool,
@@ -387,7 +387,7 @@ fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<&'static s
 }
 
 fn run() -> Result<(), Error> {
-    let mut args = Args::from_args();
+    let mut args = Args::parse();
 
     let mut headers = HeaderMap::new();
     headers.insert(
