@@ -20,9 +20,9 @@ is-it-maintained-open-issues = { repository = "kennytm/rustup-toolchain-install-
 ansi_term = "0.12"
 anyhow = "1.0.31"
 home = "0.5"
-pbr = "1"
-remove_dir_all = "0.5"
-reqwest = { version = "0.10", features = ["blocking", "gzip"]}
+pbr = "1.1"
+remove_dir_all = "0.8"
+reqwest = { version = "0.11", features = ["blocking", "gzip"]}
 structopt = "0.3"
 tar = "0.4"
 tee = "0.1"
