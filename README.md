@@ -18,18 +18,18 @@ FLAGS:
     -V, --version       Prints version information
 
 OPTIONS:
-        --channel <channel>              specify the channel of the commits instead of detecting it automatically
-    -c, --component <components>...      additional components to install, besides rustc and rust-std
-        --github-token <github-token>    An authorization token to access GitHub APIs
-    -i, --host <host>                    the triples of host platform
-    -n, --name <name>                    the name to call the toolchain
-    -p, --proxy <proxy>                  the HTTP proxy for all download requests
-    -s, --server <server>                the server path which stores the compilers [default: https://ci-artifacts.rust-lang.org]
-    -t, --targets <targets>...           additional target platforms to install rust-std for, besides the host platform
+        --channel <channel>               specify the channel of the commits instead of detecting it automatically
+    -c, --component <components>...       additional components to install, besides rustc and rust-std
+        --dev-targets <dev-targets>...    target platforms to install rustc-dev for
+        --github-token <github-token>     An authorization token to access GitHub APIs
+    -i, --host <host>                     the triple of the host platform
+    -n, --name <name>                     the name to call the toolchain
+    -p, --proxy <proxy>                   the HTTP proxy for all download requests
+    -s, --server <server>                 the server path which stores the compilers [default: https://ci-artifacts.rust-lang.org]
+    -t, --targets <targets>...            additional target platforms to install rust-std for, besides the host platform
 
 ARGS:
-    <commits>...    full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest master
-                    commit will be installed
+    <commits>...    full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest master commit will be installed
 ```
 
 Installation

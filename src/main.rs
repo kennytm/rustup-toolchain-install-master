@@ -53,7 +53,7 @@ struct Args {
     )]
     server: String,
 
-    #[structopt(short = "i", long = "host", help = "the triples of host platform")]
+    #[structopt(short = "i", long = "host", help = "the triple of the host platform")]
     host: Option<String>,
 
     #[structopt(
@@ -62,6 +62,12 @@ struct Args {
         help = "additional target platforms to install rust-std for, besides the host platform"
     )]
     targets: Vec<String>,
+
+    #[structopt(
+        long = "dev-targets",
+        help = "target platforms to install rustc-dev for"
+    )]
+    dev_targets: Vec<String>,
 
     #[structopt(
         short = "c",
@@ -202,6 +208,7 @@ struct Toolchain<'a> {
     commit: &'a str,
     host_target: &'a str,
     rust_std_targets: &'a [&'a str],
+    rustc_dev_targets: &'a [&'a str],
     components: &'a [&'a str],
     dest: PathBuf,
 }
@@ -270,6 +277,23 @@ fn install_single_toolchain(
             &toolchain.dest,
             toolchain.commit,
             "rust-std",
+            channel,
+            target,
+        )?;
+    }
+
+    // download rustc-dev for every target.
+    for target in toolchain.rustc_dev_targets {
+        let rustc_dev_filename = format!("rustc-dev-{}-{}", channel, target);
+        download_tar_xz(
+            maybe_dry_client,
+            &format!(
+                "{}/{}/{}.tar.xz",
+                prefix, toolchain.commit, rustc_dev_filename
+            ),
+            &toolchain.dest,
+            toolchain.commit,
+            "rustc-dev",
             channel,
             target,
         )?;
@@ -426,6 +450,11 @@ fn run() -> Result<(), Error> {
         .map(Deref::deref)
         .chain(once(host))
         .collect::<Vec<_>>();
+    let rustc_dev_targets = args
+        .dev_targets
+        .iter()
+        .map(Deref::deref)
+        .collect::<Vec<_>>();
 
     let toolchains_dir = {
         let path = rustup_home.join("tmp");
@@ -471,6 +500,7 @@ fn run() -> Result<(), Error> {
                 commit: &commit,
                 host_target: host,
                 rust_std_targets: &rust_std_targets,
+                rustc_dev_targets: &rustc_dev_targets,
                 components: &components,
                 dest,
             },
