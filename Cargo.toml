@@ -1,6 +1,6 @@
 [package]
 name = "rustup-toolchain-install-master"
-version = "1.8.0"
+version = "1.8.1"
 authors = ["kennytm <kennytm@gmail.com>"]
 categories = ["development-tools"]
 edition = "2018"
@@ -21,8 +21,8 @@ ansi_term = "0.12"
 anyhow = "1.0.31"
 home = "0.5"
 pbr = "1"
-remove_dir_all = "0.5"
-reqwest = { version = "0.10", features = ["blocking", "gzip"]}
+remove_dir_all = "1"
+reqwest = { version = "0.12", features = ["blocking", "gzip"]}
 structopt = "0.3"
 tar = "0.4"
 tee = "0.1"
