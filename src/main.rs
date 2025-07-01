@@ -53,7 +53,7 @@ struct Args {
     )]
     server: String,
 
-    #[arg(short = 'i', long = "host", help = "the triples of host platform")]
+    #[arg(short = 'i', long = "host", help = "the triple of the host platform")]
     host: Option<String>,
 
     #[arg(

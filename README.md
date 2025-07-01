@@ -6,30 +6,26 @@ rustup-toolchain-install-master
 Installs compiler artifacts generated fresh from Rust's CI into `rustup`.
 
 ```
-USAGE:
-    rustup-toolchain-install-master [FLAGS] [OPTIONS] [--] [commits]...
+Usage: rustup-toolchain-install-master [OPTIONS] [COMMITS]...
 
-FLAGS:
-    -a, --alt           download the alt build instead of normal build
-        --dry-run       Only log the URLs, without downloading the artifacts
-    -f, --force         Replace an existing toolchain of the same name
-    -h, --help          Prints help information
-    -k, --keep-going    Continue downloading toolchains even if some of them failed
-    -V, --version       Prints version information
+Arguments:
+  [COMMITS]...  full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest master commit will be installed
 
-OPTIONS:
-        --channel <channel>              specify the channel of the commits instead of detecting it automatically
-    -c, --component <components>...      additional components to install, besides rustc and rust-std
-        --github-token <github-token>    An authorization token to access GitHub APIs
-    -i, --host <host>                    the triples of host platform
-    -n, --name <name>                    the name to call the toolchain
-    -p, --proxy <proxy>                  the HTTP proxy for all download requests
-    -s, --server <server>                the server path which stores the compilers [default: https://ci-artifacts.rust-lang.org]
-    -t, --targets <targets>...           additional target platforms to install rust-std for, besides the host platform
-
-ARGS:
-    <commits>...    full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest master
-                    commit will be installed
+Options:
+  -n, --name <NAME>                  the name to call the toolchain
+  -a, --alt                          download the alt build instead of normal build
+  -s, --server <SERVER>              the server path which stores the compilers [default: https://ci-artifacts.rust-lang.org]
+  -i, --host <HOST>                  the triple of the host platform
+  -t, --targets <TARGETS>            additional target platforms to install rust-std for, besides the host platform
+  -c, --component <COMPONENTS>       additional components to install, besides rustc and rust-std
+      --channel <CHANNEL>            specify the channel of the commits instead of detecting it automatically
+  -p, --proxy <PROXY>                the HTTP proxy for all download requests
+      --github-token <GITHUB_TOKEN>  An authorization token to access GitHub APIs
+      --dry-run                      Only log the URLs, without downloading the artifacts
+  -f, --force                        Replace an existing toolchain of the same name
+  -k, --keep-going                   Continue downloading toolchains even if some of them failed
+  -h, --help                         Print help
+  -V, --version                      Print version
 ```
 
 Installation
