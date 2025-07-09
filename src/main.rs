@@ -59,14 +59,16 @@ struct Args {
     #[arg(
         short = 't',
         long = "targets",
-        help = "additional target platforms to install rust-std for, besides the host platform"
+        help = "additional target platforms to install rust-std for, besides the host platform",
+        num_args = 1..,
     )]
     targets: Vec<String>,
 
     #[arg(
         short = 'c',
         long = "component",
-        help = "additional components to install, besides rustc and rust-std"
+        help = "additional components to install, besides rustc and rust-std",
+        num_args = 1..,
     )]
     components: Vec<String>,
 
