@@ -17,7 +17,7 @@ is-it-maintained-issue-resolution = { repository = "kennytm/rustup-toolchain-ins
 is-it-maintained-open-issues = { repository = "kennytm/rustup-toolchain-install-master" }
 
 [dependencies]
-ansi_term = "0.12"
+colored = "3"
 anyhow = "1.0.31"
 home = "0.5"
 pbr = "1.1"

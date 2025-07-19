@@ -10,7 +10,7 @@ use std::process::exit;
 use std::process::Command;
 use std::time::Duration;
 
-use ansi_term::Color::{Red, Yellow};
+use colored::Colorize;
 use anyhow::{bail, ensure, Context, Error};
 use clap::{crate_version, Parser};
 use pbr::{ProgressBar, Units};
@@ -499,17 +499,17 @@ fn run() -> Result<(), Error> {
 }
 
 fn report_error(err: &Error) {
-    eprintln!("{} {}", Red.bold().paint("error:"), err);
+    eprintln!("{} {}", "error:".red().bold(), err);
     for cause in err.chain().skip(1) {
-        eprintln!("{} {}", Red.bold().paint("caused by:"), cause);
+        eprintln!("{} {}", "caused by:".red().bold(), cause);
     }
     exit(1);
 }
 
 fn report_warn(warn: &Error) {
-    eprintln!("{} {}", Yellow.bold().paint("warn:"), warn);
+    eprintln!("{} {}", "warn:".yellow().bold(), warn);
     for cause in warn.chain().skip(1) {
-        eprintln!("{} {}", Yellow.bold().paint("caused by:"), cause);
+        eprintln!("{} {}", "caused by:".yellow().bold(), cause);
     }
     eprintln!();
 }
