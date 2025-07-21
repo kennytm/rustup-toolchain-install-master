@@ -1,0 +1,43 @@
+name: Rust
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+env:
+  RUSTFLAGS: '-Dwarnings'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets
+  run:
+    name: Run
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch latest rustc commit
+        run: echo "RUST_COMMIT=$(git ls-remote https://github.com/rust-lang/rust master | cut -c 1-40)" >> "$GITHUB_ENV"
+      - name: Build
+        run: cargo build --release
+      - name: Run
+        run: ./target/release/rustup-toolchain-install-master --github-token "$GITHUB_TOKEN" "$RUST_COMMIT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify
+        run: rustc +"$RUST_COMMIT" -vV && rustc +"$RUST_COMMIT" -vV | grep "$RUST_COMMIT"
