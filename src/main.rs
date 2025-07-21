@@ -2,21 +2,21 @@
 
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
-use std::io::{stderr, stdout, Write};
+use std::io::{Write, stderr, stdout};
 use std::iter::once;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::process::exit;
 use std::process::Command;
+use std::process::exit;
 use std::time::Duration;
 
+use anyhow::{Context, Error, bail, ensure};
+use clap::{Parser, crate_version};
 use colored::Colorize;
-use anyhow::{bail, ensure, Context, Error};
-use clap::{crate_version, Parser};
 use pbr::{ProgressBar, Units};
 use remove_dir_all::remove_dir_all;
 use reqwest::blocking::{Client, ClientBuilder};
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_LENGTH, USER_AGENT};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::{Proxy, StatusCode};
 use tar::Archive;
 use tee::TeeReader;
@@ -121,7 +121,7 @@ fn download_tar_xz(
     channel: &str,
     target: &str,
 ) -> Result<(), Error> {
-    eprintln!("downloading <{}>...", url);
+    eprintln!("downloading <{url}>...");
     if let Some(client) = client {
         let response = client.get(url).send()?;
 
@@ -170,7 +170,7 @@ fn download_tar_xz(
             components.next();
             components.next();
 
-            let full_path = dest.join(&components.as_path());
+            let full_path = dest.join(components.as_path());
             if full_path == dest {
                 // The tmp dir code makes the root dir for us.
                 continue;
@@ -242,7 +242,7 @@ fn install_single_toolchain(
     for component in once(&"rustc").chain(toolchain.components) {
         let component_filename = if *component == "rust-src" {
             // rust-src is the only target-independent component
-            format!("{}-{}", component, channel)
+            format!("{component}-{channel}")
         } else {
             format!("{}-{}-{}", component, channel, toolchain.host_target)
         };
@@ -262,7 +262,7 @@ fn install_single_toolchain(
 
     // download rust-std for every target.
     for target in toolchain.rust_std_targets {
-        let rust_std_filename = format!("rust-std-{}-{}", channel, target);
+        let rust_std_filename = format!("rust-std-{channel}-{target}");
         download_tar_xz(
             maybe_dry_client,
             &format!(
@@ -307,7 +307,7 @@ fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<St
 
 fn fetch_master_commit_via_git() -> Result<String, Error> {
     let mut output = Command::new("git")
-        .args(&[
+        .args([
             "ls-remote",
             "https://github.com/rust-lang/rust.git",
             "master",
@@ -318,7 +318,7 @@ fn fetch_master_commit_via_git() -> Result<String, Error> {
         output
             .stdout
             .get(..40)
-            .map_or(false, |h| h.iter().all(u8::is_ascii_hexdigit)),
+            .is_some_and(|h| h.iter().all(u8::is_ascii_hexdigit)),
         "git ls-remote does not return a commit"
     );
 
@@ -334,7 +334,7 @@ fn fetch_master_commit_via_http(
     static MEDIA_TYPE: &str = "application/vnd.github.VERSION.sha";
     let mut req = client.get(URL).header(ACCEPT, MEDIA_TYPE);
     if let Some(token) = github_token {
-        req = req.header(AUTHORIZATION, format!("token {}", token));
+        req = req.header(AUTHORIZATION, format!("token {token}"));
     }
     let response = req.send()?;
     match response.status() {
@@ -372,10 +372,10 @@ fn fetch_master_commit_via_http(
 }
 
 fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<&'static str, Error> {
-    eprintln!("detecting the channel of the `{}` toolchain...", commit);
+    eprintln!("detecting the channel of the `{commit}` toolchain...");
 
     for channel in SUPPORTED_CHANNELS {
-        let url = format!("{}/{}/rust-src-{}.tar.xz", prefix, commit, channel);
+        let url = format!("{prefix}/{commit}/rust-src-{channel}.tar.xz");
         let resp = client.head(&url).send()?;
 
         match resp.status() {
@@ -459,7 +459,7 @@ fn run() -> Result<(), Error> {
         let dest = if let Some(name) = args.name.as_deref() {
             PathBuf::from(name)
         } else if args.alt {
-            PathBuf::from(format!("{}-alt", commit))
+            PathBuf::from(format!("{commit}-alt"))
         } else {
             PathBuf::from(&commit)
         };
@@ -483,7 +483,7 @@ fn run() -> Result<(), Error> {
         if args.keep_going {
             if let Err(err) = result {
                 report_warn(
-                    &err.context(format!("skipping toolchain `{}` due to a failure", commit)),
+                    &err.context(format!("skipping toolchain `{commit}` due to a failure")),
                 );
                 failed = true;
             }
