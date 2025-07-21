@@ -12,9 +12,6 @@ description = "Install master rustc toolchain into rustup"
 
 [badges]
 maintenance = { status = "passively-maintained" }
-travis-ci = { repository = "kennytm/rustup-toolchain-install-master" }
-is-it-maintained-issue-resolution = { repository = "kennytm/rustup-toolchain-install-master" }
-is-it-maintained-open-issues = { repository = "kennytm/rustup-toolchain-install-master" }
 
 [dependencies]
 colored = "3"
