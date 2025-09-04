@@ -307,11 +307,7 @@ fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<St
 
 fn fetch_master_commit_via_git() -> Result<String, Error> {
     let mut output = Command::new("git")
-        .args([
-            "ls-remote",
-            "https://github.com/rust-lang/rust.git",
-            "master",
-        ])
+        .args(["ls-remote", "https://github.com/rust-lang/rust.git", "HEAD"])
         .output()?;
     ensure!(output.status.success(), "git ls-remote exited with error");
     ensure!(
@@ -330,7 +326,7 @@ fn fetch_master_commit_via_http(
     client: &Client,
     github_token: Option<&str>,
 ) -> Result<String, Error> {
-    static URL: &str = "https://api.github.com/repos/rust-lang/rust/commits/master";
+    static URL: &str = "https://api.github.com/repos/rust-lang/rust/commits/HEAD";
     static MEDIA_TYPE: &str = "application/vnd.github.VERSION.sha";
     let mut req = client.get(URL).header(ACCEPT, MEDIA_TYPE);
     if let Some(token) = github_token {
