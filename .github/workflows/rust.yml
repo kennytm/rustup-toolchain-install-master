@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fetch latest rustc commit
-        run: echo "RUST_COMMIT=$(git ls-remote https://github.com/rust-lang/rust master | cut -c 1-40)" >> "$GITHUB_ENV"
+        run: echo "RUST_COMMIT=$(git ls-remote https://github.com/rust-lang/rust HEAD | cut -c 1-40)" >> "$GITHUB_ENV"
       - name: Build
         run: cargo build --release
       - name: Run

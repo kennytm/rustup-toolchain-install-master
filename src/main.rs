@@ -31,7 +31,7 @@ static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
 struct Args {
     #[arg(
         help = "full commit hashes of the rustc builds, all 40 digits are needed; \
-                if omitted, the latest master commit will be installed"
+                if omitted, the latest HEAD commit will be installed"
     )]
     commits: Vec<String>,
 
@@ -296,9 +296,9 @@ fn install_single_toolchain(
 }
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
-    eprintln!("fetching master commit hash... ");
+    eprintln!("fetching HEAD commit hash... ");
     fetch_master_commit_via_git()
-        .context("unable to fetch master commit via git, falling back to HTTP")
+        .context("unable to fetch HEAD commit via git, falling back to HTTP")
         .or_else(|err| {
             report_warn(&err);
             fetch_master_commit_via_http(client, github_token)

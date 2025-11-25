@@ -9,7 +9,7 @@ Installs compiler artifacts generated fresh from Rust's CI into `rustup`.
 Usage: rustup-toolchain-install-master [OPTIONS] [COMMITS]...
 
 Arguments:
-  [COMMITS]...  full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest master commit will be installed
+  [COMMITS]...  full commit hashes of the rustc builds, all 40 digits are needed; if omitted, the latest HEAD commit will be installed
 
 Options:
   -n, --name <NAME>                  the name to call the toolchain
