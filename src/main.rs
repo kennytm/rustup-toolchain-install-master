@@ -233,7 +233,7 @@ fn install_single_toolchain(
     }
 
     let channel = if let Some(channel) = override_channel {
-        channel
+        String::from(channel)
     } else {
         get_channel(client, prefix, toolchain.commit)?
     };
@@ -255,7 +255,7 @@ fn install_single_toolchain(
             &toolchain.dest,
             toolchain.commit,
             component,
-            channel,
+            &channel,
             toolchain.host_target,
         )?;
     }
@@ -272,7 +272,7 @@ fn install_single_toolchain(
             &toolchain.dest,
             toolchain.commit,
             "rust-std",
-            channel,
+            &channel,
             target,
         )?;
     }
@@ -367,15 +367,26 @@ fn fetch_master_commit_via_http(
     }
 }
 
-fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<&'static str, Error> {
+fn get_channel(client: &Client, prefix: &str, commit: &str) -> Result<String, Error> {
     eprintln!("detecting the channel of the `{commit}` toolchain...");
 
+    let url = format!("{prefix}/{commit}/package-version");
+    let resp = client.get(&url).send()?;
+
+    match resp.status() {
+        StatusCode::OK => return Ok(resp.text()?.trim().to_owned()),
+        StatusCode::NOT_FOUND | StatusCode::FORBIDDEN => {}
+        status => bail!("unexpected status code {} for GET {}", status, url),
+    }
+
+    // FIXME: This can be removed mid-2026 once artifacts for commits landed prior to
+    // https://github.com/rust-lang/rust/pull/149964 have been deleted in the S3 buckets.
     for channel in SUPPORTED_CHANNELS {
         let url = format!("{prefix}/{commit}/rust-src-{channel}.tar.xz");
         let resp = client.head(&url).send()?;
 
         match resp.status() {
-            StatusCode::OK => return Ok(channel),
+            StatusCode::OK => return Ok(String::from(*channel)),
             StatusCode::NOT_FOUND | StatusCode::FORBIDDEN => {}
             status => bail!("unexpected status code {} for HEAD {}", status, url),
         }
