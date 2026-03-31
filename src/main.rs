@@ -8,9 +8,10 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::exit;
+use std::thread::sleep;
 use std::time::Duration;
 
-use anyhow::{Context, Error, bail, ensure};
+use anyhow::{Context, Error, anyhow, bail, ensure};
 use clap::{Parser, crate_version};
 use colored::Colorize;
 use pbr::{ProgressBar, Units};
@@ -24,6 +25,9 @@ use tempfile::{tempdir, tempdir_in};
 use xz2::read::XzDecoder;
 
 static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
+
+const MIN_RETRY_SLEEP: Duration = Duration::from_millis(250);
+const MAX_RETRY_SLEEP: Duration = Duration::from_secs(60);
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Parser, Debug)]
@@ -53,8 +57,13 @@ struct Args {
     )]
     server: String,
 
-    #[arg(short = 'i', long = "host", help = "the triple of the host platform")]
-    host: Option<String>,
+    #[arg(
+        short = 'i',
+        long = "host",
+        help = "the triple of the host platform",
+        default_value = env!("HOST")
+    )]
+    host: String,
 
     #[arg(
         short = 't',
@@ -110,93 +119,162 @@ struct Args {
         help = "Continue downloading toolchains even if some of them failed"
     )]
     keep_going: bool,
+
+    #[arg(
+        long = "retry",
+        short = 'r',
+        help = "Maximum number of retries for xz downloads",
+        default_value = "0"
+    )]
+    retry: u32,
 }
 
-fn download_tar_xz(
-    client: Option<&Client>,
-    url: &str,
-    dest: &Path,
-    commit: &str,
-    component: &str,
-    channel: &str,
-    target: &str,
-) -> Result<(), Error> {
-    eprintln!("downloading <{url}>...");
-    if let Some(client) = client {
-        let response = client.get(url).send()?;
+struct RetryableError {
+    error: Error,
+    should_retry: bool,
+}
 
-        match response.status() {
-            StatusCode::OK => {}
-            StatusCode::NOT_FOUND => bail!(
-                "missing component `{}` on toolchain `{}` on channel `{}` for target `{}`",
-                component,
-                commit,
-                channel,
-                target,
-            ),
-            status => bail!("received status {} for GET {}", status, url),
-        };
+impl RetryableError {
+    fn retryable<E: Into<Error>>(err: E) -> Self {
+        Self {
+            error: err.into(),
+            should_retry: true,
+        }
+    }
+}
 
-        let length = response
-            .headers()
-            .get(CONTENT_LENGTH)
-            .and_then(|h| h.to_str().ok())
-            .and_then(|h| h.parse().ok())
-            .unwrap_or(0);
+impl<E: Into<Error>> From<E> for RetryableError {
+    fn from(err: E) -> Self {
+        Self {
+            error: err.into(),
+            should_retry: false,
+        }
+    }
+}
 
-        let err = stderr();
-        let lock = err.lock();
-        let mut progress_bar = ProgressBar::on(lock, length);
-        progress_bar.set_units(Units::Bytes);
-        progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
+#[derive(Debug)]
+struct TarXzDownloader<'a> {
+    client: Option<&'a Client>,
+    toolchain: &'a Toolchain<'a>,
+    retry: u32,
+}
 
-        let response = TeeReader::new(response, &mut progress_bar);
-        let response = XzDecoder::new(response);
-        for entry in Archive::new(response).entries()? {
-            let mut entry = entry?;
-            let relpath = entry.path()?;
-
-            let mut components = relpath.components();
-
-            // Reject path components that are not normal (.|..|/| etc)
-            for part in components.clone() {
-                match part {
-                    std::path::Component::Normal(_) => {}
-                    _ => bail!("bad path in tar: {}", relpath.display()),
+impl<'a> TarXzDownloader<'a> {
+    fn download(&self, url: &str, component: &str, target: &str) -> Result<(), Error> {
+        let mut attempt = 0;
+        let mut sleep_duration = MIN_RETRY_SLEEP;
+        // we should probably use `tower::retry::backoff` here,
+        //  but we need to refactor the program to use async first.
+        // note that we can't use `reqwest::retry`
+        //  because it can't handle TCP RST after the header is received when reading the body
+        loop {
+            match self.download_once(url, component, target) {
+                Ok(()) => return Ok(()),
+                Err(err) if err.should_retry && attempt < self.retry => {
+                    report_warn(&err.error);
+                    eprintln!(
+                        "download failed, going to retry after {sleep_duration:?} ({attempt}/{})",
+                        self.retry
+                    );
+                    sleep(sleep_duration);
+                    attempt += 1;
+                    sleep_duration = MAX_RETRY_SLEEP.min(sleep_duration * 2);
                 }
-            }
-
-            // Throw away the first two path components: our root was supplied
-            components.next();
-            components.next();
-
-            let full_path = dest.join(components.as_path());
-            if full_path == dest {
-                // The tmp dir code makes the root dir for us.
-                continue;
-            }
-
-            // Bail out if we get hard links, device nodes or any other unusual content
-            // - it is most likely an attack, as rusts cross-platform nature precludes
-            // such artifacts
-            let kind = entry.header().entry_type();
-
-            match kind {
-                tar::EntryType::Directory => {
-                    create_dir_all(full_path)?;
-                }
-                tar::EntryType::Regular => {
-                    entry.unpack(full_path)?;
-                }
-                _ => bail!("unsupported tar entry: {:?}", kind),
+                Err(err) => return Err(err.error),
             }
         }
-
-        progress_bar.finish();
-        eprintln!();
     }
 
-    Ok(())
+    fn download_once(
+        &self,
+        url: &str,
+        component: &str,
+        target: &str,
+    ) -> Result<(), RetryableError> {
+        eprintln!("downloading <{url}>...");
+        if let Some(client) = self.client {
+            let response = client.get(url).send().map_err(RetryableError::retryable)?;
+
+            let status = response.status();
+            if status != StatusCode::OK {
+                return Err(RetryableError {
+                    error: if status == StatusCode::NOT_FOUND {
+                        anyhow!(
+                            "missing component `{component}` on toolchain `{}` on channel `{}` for target `{target}`",
+                            self.toolchain.commit,
+                            self.toolchain.channel,
+                        )
+                    } else {
+                        anyhow!("received status {status} for GET {url}")
+                    },
+                    should_retry: status.is_server_error(),
+                });
+            }
+
+            let length = response
+                .headers()
+                .get(CONTENT_LENGTH)
+                .and_then(|h| h.to_str().ok())
+                .and_then(|h| h.parse().ok())
+                .unwrap_or(0);
+
+            let err = stderr();
+            let lock = err.lock();
+            let mut progress_bar = ProgressBar::on(lock, length);
+            progress_bar.set_units(Units::Bytes);
+            progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
+
+            let response = TeeReader::new(response, &mut progress_bar);
+            let response = XzDecoder::new(response);
+            for entry in Archive::new(response)
+                .entries()
+                .map_err(RetryableError::retryable)?
+            {
+                let mut entry = entry.map_err(RetryableError::retryable)?;
+                let relpath = entry.path()?;
+
+                let mut components = relpath.components();
+
+                // Reject path components that are not normal (.|..|/| etc)
+                for part in components.clone() {
+                    match part {
+                        std::path::Component::Normal(_) => {}
+                        _ => return Err(anyhow!("bad path in tar: {}", relpath.display()).into()),
+                    }
+                }
+
+                // Throw away the first two path components: our root was supplied
+                components.next();
+                components.next();
+
+                let full_path = self.toolchain.dest.join(components.as_path());
+                if full_path == self.toolchain.dest {
+                    // The tmp dir code makes the root dir for us.
+                    continue;
+                }
+
+                // Bail out if we get hard links, device nodes or any other unusual content
+                // - it is most likely an attack, as rusts cross-platform nature precludes
+                // such artifacts
+                let kind = entry.header().entry_type();
+
+                match kind {
+                    tar::EntryType::Directory => {
+                        create_dir_all(full_path)?;
+                    }
+                    tar::EntryType::Regular => {
+                        entry.unpack(full_path).map_err(RetryableError::retryable)?;
+                    }
+                    _ => return Err(anyhow!("unsupported tar entry: {kind:?}").into()),
+                }
+            }
+
+            progress_bar.finish();
+            eprintln!();
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -205,17 +283,17 @@ struct Toolchain<'a> {
     host_target: &'a str,
     rust_std_targets: &'a [&'a str],
     components: &'a [&'a str],
+    channel: &'a str,
     dest: PathBuf,
 }
 
 fn install_single_toolchain(
-    client: &Client,
     maybe_dry_client: Option<&Client>,
     prefix: &str,
     toolchains_path: &Path,
     toolchain: &Toolchain<'_>,
-    override_channel: Option<&str>,
     force: bool,
+    retry: u32,
 ) -> Result<(), Error> {
     let toolchain_path = toolchains_path.join(&toolchain.dest);
     if toolchain_path.is_dir() {
@@ -232,47 +310,36 @@ fn install_single_toolchain(
         }
     }
 
-    let channel = if let Some(channel) = override_channel {
-        String::from(channel)
-    } else {
-        get_channel(client, prefix, toolchain.commit)?
+    let downloader = TarXzDownloader {
+        client: maybe_dry_client,
+        toolchain,
+        retry,
     };
 
     // download every component except rust-std.
     for component in once(&"rustc").chain(toolchain.components) {
         let component_filename = if *component == "rust-src" {
             // rust-src is the only target-independent component
-            format!("{component}-{channel}")
+            format!("{component}-{}", toolchain.channel)
         } else {
-            format!("{}-{}-{}", component, channel, toolchain.host_target)
+            format!(
+                "{component}-{}-{}",
+                toolchain.channel, toolchain.host_target
+            )
         };
-        download_tar_xz(
-            maybe_dry_client,
-            &format!(
-                "{}/{}/{}.tar.xz",
-                prefix, toolchain.commit, &component_filename
-            ),
-            &toolchain.dest,
-            toolchain.commit,
+        downloader.download(
+            &format!("{prefix}/{}/{component_filename}.tar.xz", toolchain.commit),
             component,
-            &channel,
             toolchain.host_target,
         )?;
     }
 
     // download rust-std for every target.
     for target in toolchain.rust_std_targets {
-        let rust_std_filename = format!("rust-std-{channel}-{target}");
-        download_tar_xz(
-            maybe_dry_client,
-            &format!(
-                "{}/{}/{}.tar.xz",
-                prefix, toolchain.commit, rust_std_filename
-            ),
-            &toolchain.dest,
-            toolchain.commit,
+        let rust_std_filename = format!("rust-std-{}-{}", toolchain.channel, target);
+        downloader.download(
+            &format!("{prefix}/{}/{rust_std_filename}.tar.xz", toolchain.commit,),
             "rust-std",
-            &channel,
             target,
         )?;
     }
@@ -425,15 +492,13 @@ fn run() -> Result<(), Error> {
         ));
     }
 
-    let host = args.host.as_deref().unwrap_or(env!("HOST"));
-
     let components = args.components.iter().map(Deref::deref).collect::<Vec<_>>();
 
     let rust_std_targets = args
         .targets
         .iter()
         .map(Deref::deref)
-        .chain(once(host))
+        .chain(once(&*args.host))
         .collect::<Vec<_>>();
 
     let toolchains_dir = {
@@ -471,20 +536,26 @@ fn run() -> Result<(), Error> {
             PathBuf::from(&commit)
         };
 
+        let channel = if let Some(channel) = args.channel.clone() {
+            channel
+        } else {
+            get_channel(&client, &prefix, &commit)?
+        };
+
         let result = install_single_toolchain(
-            &client,
             dry_run_client,
             &prefix,
             &toolchains_path,
             &Toolchain {
                 commit: &commit,
-                host_target: host,
+                host_target: &args.host,
                 rust_std_targets: &rust_std_targets,
                 components: &components,
+                channel: &channel,
                 dest,
             },
-            args.channel.as_deref(),
             args.force,
+            args.retry,
         );
 
         if args.keep_going {
