@@ -15,15 +15,16 @@ Options:
   -n, --name <NAME>                  the name to call the toolchain
   -a, --alt                          download the alt build instead of normal build
   -s, --server <SERVER>              the server path which stores the compilers [default: https://ci-artifacts.rust-lang.org]
-  -i, --host <HOST>                  the triple of the host platform
-  -t, --targets <TARGETS>            additional target platforms to install rust-std for, besides the host platform
-  -c, --component <COMPONENTS>       additional components to install, besides rustc and rust-std
+  -i, --host <HOST>                  the triple of the host platform [default: x86_64-unknown-linux-gnu]
+  -t, --targets <TARGETS>...         additional target platforms to install rust-std for, besides the host platform
+  -c, --component <COMPONENTS>...    additional components to install, besides rustc and rust-std
       --channel <CHANNEL>            specify the channel of the commits instead of detecting it automatically
   -p, --proxy <PROXY>                the HTTP proxy for all download requests
       --github-token <GITHUB_TOKEN>  An authorization token to access GitHub APIs
       --dry-run                      Only log the URLs, without downloading the artifacts
   -f, --force                        Replace an existing toolchain of the same name
   -k, --keep-going                   Continue downloading toolchains even if some of them failed
+  -r, --retry <RETRY>                Maximum number of retries for xz downloads [default: 0]
   -h, --help                         Print help
   -V, --version                      Print version
 ```
