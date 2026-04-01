@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 
+use std::borrow::Cow;
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, rename};
 use std::io::{Write, stderr, stdout};
@@ -156,6 +157,7 @@ impl<E: Into<Error>> From<E> for RetryableError {
 struct TarXzDownloader<'a> {
     client: Option<&'a Client>,
     toolchain: &'a Toolchain<'a>,
+    channel: &'a str,
     retry: u32,
 }
 
@@ -202,7 +204,7 @@ impl<'a> TarXzDownloader<'a> {
                         anyhow!(
                             "missing component `{component}` on toolchain `{}` on channel `{}` for target `{target}`",
                             self.toolchain.commit,
-                            self.toolchain.channel,
+                            self.channel,
                         )
                     } else {
                         anyhow!("received status {status} for GET {url}")
@@ -283,83 +285,96 @@ struct Toolchain<'a> {
     host_target: &'a str,
     rust_std_targets: &'a [&'a str],
     components: &'a [&'a str],
-    channel: &'a str,
     dest: PathBuf,
 }
 
-fn install_single_toolchain(
-    maybe_dry_client: Option<&Client>,
-    prefix: &str,
-    toolchains_path: &Path,
-    toolchain: &Toolchain<'_>,
+struct Installer<'a> {
+    client: &'a Client,
+    actually_install: bool,
+    override_channel: Option<&'a str>,
+    prefix: &'a str,
+    toolchains_path: &'a Path,
     force: bool,
     retry: u32,
-) -> Result<(), Error> {
-    let toolchain_path = toolchains_path.join(&toolchain.dest);
-    if toolchain_path.is_dir() {
-        if force {
-            if maybe_dry_client.is_some() {
-                remove_dir_all(&toolchain_path)?;
+}
+
+impl<'a> Installer<'a> {
+    fn install_single_toolchain(&self, toolchain: &Toolchain<'_>) -> Result<(), Error> {
+        let toolchain_path = self.toolchains_path.join(&toolchain.dest);
+        if toolchain_path.is_dir() {
+            if self.force {
+                if self.actually_install {
+                    remove_dir_all(&toolchain_path)?;
+                }
+            } else {
+                eprintln!(
+                    "toolchain `{}` is already installed",
+                    toolchain.dest.display()
+                );
+                return Ok(());
             }
+        }
+
+        let channel = if let Some(channel) = self.override_channel {
+            Cow::Borrowed(channel)
         } else {
+            Cow::Owned(get_channel(self.client, self.prefix, toolchain.commit)?)
+        };
+
+        let downloader = TarXzDownloader {
+            client: self.actually_install.then_some(self.client),
+            toolchain,
+            channel: &channel,
+            retry: self.retry,
+        };
+
+        // download every component except rust-std.
+        for component in once(&"rustc").chain(toolchain.components) {
+            let component_filename = if *component == "rust-src" {
+                // rust-src is the only target-independent component
+                format_args!("{component}-{channel}")
+            } else {
+                format_args!("{component}-{channel}-{}", toolchain.host_target)
+            };
+            downloader.download(
+                &format!(
+                    "{}/{}/{component_filename}.tar.xz",
+                    self.prefix, toolchain.commit
+                ),
+                component,
+                toolchain.host_target,
+            )?;
+        }
+
+        // download rust-std for every target.
+        for target in toolchain.rust_std_targets {
+            downloader.download(
+                &format!(
+                    "{}/{}/rust-std-{channel}-{target}.tar.xz",
+                    self.prefix, toolchain.commit,
+                ),
+                "rust-std",
+                target,
+            )?;
+        }
+
+        // install
+        if self.actually_install {
+            rename(&toolchain.dest, toolchain_path)?;
             eprintln!(
-                "toolchain `{}` is already installed",
+                "toolchain `{}` is successfully installed!",
                 toolchain.dest.display()
             );
-            return Ok(());
-        }
-    }
-
-    let downloader = TarXzDownloader {
-        client: maybe_dry_client,
-        toolchain,
-        retry,
-    };
-
-    // download every component except rust-std.
-    for component in once(&"rustc").chain(toolchain.components) {
-        let component_filename = if *component == "rust-src" {
-            // rust-src is the only target-independent component
-            format!("{component}-{}", toolchain.channel)
         } else {
-            format!(
-                "{component}-{}-{}",
-                toolchain.channel, toolchain.host_target
-            )
-        };
-        downloader.download(
-            &format!("{prefix}/{}/{component_filename}.tar.xz", toolchain.commit),
-            component,
-            toolchain.host_target,
-        )?;
-    }
+            eprintln!(
+                "toolchain `{}` will be installed to `{}` on real run",
+                toolchain.dest.display(),
+                toolchain_path.display()
+            );
+        }
 
-    // download rust-std for every target.
-    for target in toolchain.rust_std_targets {
-        let rust_std_filename = format!("rust-std-{}-{}", toolchain.channel, target);
-        downloader.download(
-            &format!("{prefix}/{}/{rust_std_filename}.tar.xz", toolchain.commit,),
-            "rust-std",
-            target,
-        )?;
+        Ok(())
     }
-
-    // install
-    if maybe_dry_client.is_some() {
-        rename(&toolchain.dest, toolchain_path)?;
-        eprintln!(
-            "toolchain `{}` is successfully installed!",
-            toolchain.dest.display()
-        );
-    } else {
-        eprintln!(
-            "toolchain `{}` will be installed to `{}` on real run",
-            toolchain.dest.display(),
-            toolchain_path.display()
-        );
-    }
-
-    Ok(())
 }
 
 fn fetch_master_commit(client: &Client, github_token: Option<&str>) -> Result<String, Error> {
@@ -525,8 +540,16 @@ fn run() -> Result<(), Error> {
             .push(fetch_master_commit(&client, args.github_token.as_deref())?);
     }
 
-    let dry_run_client = if args.dry_run { None } else { Some(&client) };
     let mut failed = false;
+    let installer = Installer {
+        client: &client,
+        actually_install: !args.dry_run,
+        override_channel: args.channel.as_deref(),
+        prefix: &prefix,
+        toolchains_path: &toolchains_path,
+        force: args.force,
+        retry: args.retry,
+    };
     for commit in args.commits {
         let dest = if let Some(name) = args.name.as_deref() {
             PathBuf::from(name)
@@ -536,27 +559,13 @@ fn run() -> Result<(), Error> {
             PathBuf::from(&commit)
         };
 
-        let channel = if let Some(channel) = args.channel.clone() {
-            channel
-        } else {
-            get_channel(&client, &prefix, &commit)?
-        };
-
-        let result = install_single_toolchain(
-            dry_run_client,
-            &prefix,
-            &toolchains_path,
-            &Toolchain {
-                commit: &commit,
-                host_target: &args.host,
-                rust_std_targets: &rust_std_targets,
-                components: &components,
-                channel: &channel,
-                dest,
-            },
-            args.force,
-            args.retry,
-        );
+        let result = installer.install_single_toolchain(&Toolchain {
+            commit: &commit,
+            host_target: &args.host,
+            rust_std_targets: &rust_std_targets,
+            components: &components,
+            dest,
+        });
 
         if args.keep_going {
             if let Err(err) = result {
