@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fetch latest rustc commit
         run: echo "RUST_COMMIT=$(git ls-remote https://github.com/rust-lang/rust HEAD | cut -c 1-40)" >> "$GITHUB_ENV"
       - name: Build
