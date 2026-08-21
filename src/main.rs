@@ -506,6 +506,16 @@ fn run() -> Result<(), Error> {
         ));
     }
 
+    if args
+        .commits
+        .iter()
+        .any(|hash| hash.len() != 40 || hash.chars().any(|c| !c.is_ascii_hexdigit()))
+    {
+        return Err(Error::msg(
+            "commit identifiers must be full-length git commit hashes",
+        ));
+    }
+
     let components = args.components.iter().map(Deref::deref).collect::<Vec<_>>();
 
     let rust_std_targets = args
