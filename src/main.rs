@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::env::set_current_dir;
 use std::fs::{create_dir_all, remove_dir_all, rename};
-use std::io::{Write, stderr, stdout};
+use std::io::{Write, stdout};
 use std::iter::once;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -14,13 +14,12 @@ use std::time::Duration;
 
 use anyhow::{Context, Error, anyhow, bail, ensure};
 use clap::{Parser, crate_version};
-use colored::Colorize;
-use pbr::{ProgressBar, Units};
+use colored::Colorize as _;
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::{Proxy, StatusCode};
 use tar::Archive;
-use tee::TeeReader;
 use tempfile::{tempdir, tempdir_in};
 use xz2::read::XzDecoder;
 
@@ -28,6 +27,8 @@ static SUPPORTED_CHANNELS: &[&str] = &["nightly", "beta", "stable"];
 
 const MIN_RETRY_SLEEP: Duration = Duration::from_millis(250);
 const MAX_RETRY_SLEEP: Duration = Duration::from_secs(60);
+
+const PROGRESS_TEMPLATE: &str = "{binary_bytes} / {binary_total_bytes} [{wide_bar}] {percent_precise}% {binary_bytes_per_sec} {eta}";
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Parser, Debug)]
@@ -219,13 +220,15 @@ impl<'a> TarXzDownloader<'a> {
                 .and_then(|h| h.parse().ok())
                 .unwrap_or(0);
 
-            let err = stderr();
-            let lock = err.lock();
-            let mut progress_bar = ProgressBar::on(lock, length);
-            progress_bar.set_units(Units::Bytes);
-            progress_bar.set_max_refresh_rate(Some(Duration::from_secs(1)));
+            let progress_bar =
+                ProgressBar::with_draw_target(Some(length), ProgressDrawTarget::stderr_with_hz(1));
+            progress_bar.set_style(
+                ProgressStyle::with_template(PROGRESS_TEMPLATE)
+                    .expect("valid progress bar template")
+                    .progress_chars("=> "),
+            );
 
-            let response = TeeReader::new(response, &mut progress_bar);
+            let response = progress_bar.wrap_read(response);
             let response = XzDecoder::new(response);
             for entry in Archive::new(response)
                 .entries()
